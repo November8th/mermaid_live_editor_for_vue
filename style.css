@@ -636,7 +636,8 @@ body {
   filter: drop-shadow(0 0 4px rgba(99, 102, 241, 0.6));
 }
 
-.conn-port:hover {
+.conn-port:hover,
+.conn-port.port-hovered {
   r: 7;
   opacity: 1;
   filter: drop-shadow(0 0 8px rgba(99, 102, 241, 0.9));
@@ -646,7 +647,8 @@ body {
   filter: drop-shadow(0 0 4px rgba(248, 113, 113, 0.6));
 }
 
-.conn-port[data-has-edge="true"]:hover {
+.conn-port[data-has-edge="true"]:hover,
+.conn-port[data-has-edge="true"].port-hovered {
   filter: drop-shadow(0 0 8px rgba(248, 113, 113, 0.9));
 }
 
@@ -655,13 +657,20 @@ body {
   animation: portGlowPulse 1.5s ease-in-out infinite;
 }
 
+.conn-port-hit {
+  fill: #fff;
+  fill-opacity: 0.001;
+  stroke: none;
+}
+
 @keyframes portGlowPulse {
   0%, 100% { opacity: 0; }
   50% { opacity: 0.4; }
 }
 
 .conn-port:hover + .conn-port-glow,
-.conn-port-glow:hover {
+.conn-port-glow:hover,
+.conn-port-glow.port-hovered {
   opacity: 0.6;
 }
 
@@ -687,9 +696,9 @@ body {
 }
 
 .preview-area__canvas .edgePath path.edge-hovered {
-  filter: drop-shadow(0 0 4px var(--accent-primary));
-  stroke: var(--accent-primary) !important;
-  stroke-width: 2.5px !important;
+  filter: drop-shadow(0 0 8px rgba(79, 70, 229, 0.7));
+  stroke: #4338ca !important;
+  stroke-width: 3.5px !important;
 }
 
 /* --- OVERRIDE MERMAID DEFAULT BLOCKERS --- */
@@ -700,7 +709,7 @@ body {
 
 .preview-area__canvas .edgePath path.edge-click-area {
   pointer-events: stroke !important;
-  stroke-width: 40px !important;
+  stroke-width: 16px !important;
   stroke: transparent !important;
   fill: none !important;
 }
@@ -780,6 +789,9 @@ body {
   transition: r 120ms ease;
 }
 .conn-port:hover {
+  r: 7;
+}
+.conn-port.port-hovered {
   r: 7;
 }
 .conn-port-glow {

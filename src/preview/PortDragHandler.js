@@ -14,6 +14,7 @@
 
       var overlay = document.createElementNS('http://www.w3.org/2000/svg', 'g');
       overlay.setAttribute('id', 'conn-port-overlay');
+      overlay.style.pointerEvents = 'none';
       svgEl.appendChild(overlay);
       this._overlay = overlay;
 
@@ -31,6 +32,7 @@
     // Show 4 port circles around a node
     showPorts: function (svgEl, nodeId, positions, ctx) {
       if (!this._overlay) return;
+      this._bringOverlayToFront(svgEl);
       this.clearPorts();
 
       var self = this;
@@ -39,12 +41,45 @@
         (function (side) {
           var pt = SvgPositionTracker.getPortPosition(positions, nodeId, side);
 
+          var setHovered = function (hovered) {
+            circle.classList.toggle('port-hovered', hovered);
+            glow.classList.toggle('port-hovered', hovered);
+          };
+
+          var onPointerDown = function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            self._startDrag(svgEl, nodeId, pt, positions, ctx);
+          };
+
+          var onPointerEnter = function () {
+            setHovered(true);
+            ctx.setState({ portDragging: ctx.getState().portDragging }); // keep alive
+          };
+
+          var onPointerLeave = function () {
+            setHovered(false);
+          };
+
+          // Invisible hit target
+          var hit = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+          hit.setAttribute('class', 'conn-port-hit');
+          hit.setAttribute('cx', pt.x);
+          hit.setAttribute('cy', pt.y);
+          hit.setAttribute('r', '11');
+          hit.setAttribute('data-node-id', nodeId);
+          hit.setAttribute('data-side', side);
+          hit.style.cursor = 'crosshair';
+          hit.style.pointerEvents = 'all';
+          self._overlay.appendChild(hit);
+
           // Glow halo
           var glow = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
           glow.setAttribute('class', 'conn-port-glow');
           glow.setAttribute('cx', pt.x);
           glow.setAttribute('cy', pt.y);
           glow.setAttribute('r', '10');
+          glow.style.pointerEvents = 'none';
           self._overlay.appendChild(glow);
 
           // Port dot
@@ -56,24 +91,19 @@
           circle.setAttribute('data-node-id', nodeId);
           circle.setAttribute('data-side', side);
           circle.style.cursor = 'crosshair';
+          circle.style.pointerEvents = 'none';
           self._overlay.appendChild(circle);
 
-          circle.addEventListener('mousedown', function (e) {
-            e.preventDefault();
-            e.stopPropagation();
-            self._startDrag(svgEl, nodeId, pt, positions, ctx);
-          });
-
-          // Keep ports visible when cursor is on them
-          circle.addEventListener('mouseenter', function () {
-            ctx.setState({ portDragging: ctx.getState().portDragging }); // keep alive
-          });
+          hit.addEventListener('mousedown', onPointerDown);
+          hit.addEventListener('mouseenter', onPointerEnter);
+          hit.addEventListener('mouseleave', onPointerLeave);
         })(SIDES[s]);
       }
     },
 
     _startDrag: function (svgEl, fromNodeId, fromPt, positions, ctx) {
       var self = this;
+      self._bringOverlayToFront(svgEl);
       ctx.setState({ portDragging: true });
 
       self._dragLine.setAttribute('x1', fromPt.x);
@@ -172,8 +202,14 @@
 
     clearPorts: function () {
       if (!this._overlay) return;
-      var ports = this._overlay.querySelectorAll('.conn-port, .conn-port-glow');
+      var ports = this._overlay.querySelectorAll('.conn-port, .conn-port-glow, .conn-port-hit');
       for (var i = 0; i < ports.length; i++) ports[i].remove();
+    },
+
+    _bringOverlayToFront: function (svgEl) {
+      if (this._overlay && this._overlay.parentNode === svgEl) {
+        svgEl.appendChild(this._overlay);
+      }
     }
   };
 

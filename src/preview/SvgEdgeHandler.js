@@ -108,8 +108,8 @@
       // Keep a real stroke color and near-zero opacity so browsers still expose
       // the stroke geometry to hit-testing.
       el.setAttribute('stroke', '#000');
-      el.setAttribute('stroke-opacity', '0.01');
-      el.setAttribute('stroke-width', '40');
+      el.setAttribute('stroke-opacity', '0.003');
+      el.setAttribute('stroke-width', '16');
       el.setAttribute('stroke-linecap', 'round');
       el.setAttribute('stroke-linejoin', 'round');
       el.setAttribute('fill', 'none');
@@ -120,13 +120,13 @@
     _bindEdgeEvents: function (hitEl, pathEl, idx, ctx) {
       hitEl.addEventListener('mouseenter', function () {
         pathEl.classList.add('edge-hovered');
-        hitEl.setAttribute('stroke-opacity', '0.12');
-        hitEl.setAttribute('stroke', 'rgba(99,102,241,0.12)');
+        hitEl.setAttribute('stroke-opacity', '0.08');
+        hitEl.setAttribute('stroke', '#4f46e5');
       });
       hitEl.addEventListener('mouseleave', function () {
         pathEl.classList.remove('edge-hovered');
         hitEl.setAttribute('stroke', '#000');
-        hitEl.setAttribute('stroke-opacity', '0.01');
+        hitEl.setAttribute('stroke-opacity', '0.003');
       });
       hitEl.addEventListener('click', function (e) {
         e.preventDefault();
