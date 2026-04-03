@@ -24,7 +24,15 @@
   ];
 
   // Edge type definitions
+  // NOTE: "-- label -->" patterns MUST come before plain "-->" patterns
+  // because "-->" also starts with "--".
   var EDGE_PATTERNS = [
+    // "-- label -->" / "== label ==>" alternative label syntax
+    { regex: /^==\s+(.+?)\s*==>/, type: '==>', hasLabel: true },
+    { regex: /^--\s+(.+?)\s*-->/, type: '-->', hasLabel: true },
+    { regex: /^--\s+(.+?)\s*-\.->/, type: '-.->',  hasLabel: true },
+    { regex: /^--\s+(.+?)\s*---/, type: '---', hasLabel: true },
+    // Pipe-label syntax: -->|label|
     { regex: /^==>\|([^|]*)\|/, type: '==>', hasLabel: true },
     { regex: /^==>\s*/, type: '==>', hasLabel: false },
     { regex: /^-->\|([^|]*)\|/, type: '-->', hasLabel: true },
@@ -63,14 +71,34 @@
       var shapeDef = SHAPE_MAP[i];
       if (rest.indexOf(shapeDef.open) === 0) {
         var openLen = shapeDef.open.length;
-        var closeIdx = rest.indexOf(shapeDef.close, openLen);
-        if (closeIdx !== -1) {
-          var text = rest.substring(openLen, closeIdx).trim();
-          // Handle quoted text
-          if (text.charAt(0) === '"' && text.charAt(text.length - 1) === '"') {
-            text = text.substring(1, text.length - 1);
+        var innerStart = rest.substring(openLen);
+        var text, totalLen, closeIdx;
+
+        // Quoted text: "..." — find the closing quote THEN the bracket.
+        // This handles labels that contain the bracket character itself.
+        if (innerStart.charAt(0) === '"') {
+          var closeSeq = '"' + shapeDef.close;
+          var seqIdx = rest.indexOf(closeSeq, openLen + 1);
+          if (seqIdx !== -1) {
+            text = rest.substring(openLen + 1, seqIdx)
+              .replace(/\\"/g, '"')
+              .replace(/\\\\/g, '\\'); // strip surrounding quotes
+            totalLen = id.length + seqIdx + closeSeq.length;
+            return {
+              id: id,
+              text: text || id,
+              shape: shapeDef.shape,
+              endIndex: totalLen,
+              raw: str.substring(0, totalLen)
+            };
           }
-          var totalLen = id.length + closeIdx + shapeDef.close.length;
+        }
+
+        // Unquoted text — find the first closing bracket
+        closeIdx = rest.indexOf(shapeDef.close, openLen);
+        if (closeIdx !== -1) {
+          text = rest.substring(openLen, closeIdx).trim();
+          totalLen = id.length + closeIdx + shapeDef.close.length;
           return {
             id: id,
             text: text || id,

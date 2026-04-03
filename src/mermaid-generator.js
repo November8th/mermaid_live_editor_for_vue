@@ -23,23 +23,34 @@
     asymmetric: ['>', ']'],
   };
 
+  function escapeLabel(text) {
+    return String(text)
+      .replace(/\\/g, '\\\\')
+      .replace(/"/g, '\\"');
+  }
+
   /**
    * Generate node definition string.
    */
   function generateNode(node) {
     var brackets = SHAPE_BRACKETS[node.shape] || SHAPE_BRACKETS.rect;
     var text = node.text || node.id;
-    // If text equals id and shape is rect, just output id
+    // If text equals id and shape is rect, just output bare id
     if (text === node.id && node.shape === 'rect') {
       return node.id;
     }
-    return node.id + brackets[0] + text + brackets[1];
+    // Use quoted labels consistently for non-bare node definitions.
+    return node.id + brackets[0] + '"' + escapeLabel(text) + '"' + brackets[1];
   }
 
   /**
    * Generate the full Mermaid script from internal model.
-   * @param {object} model - { type, direction, nodes, edges }
-   * @returns {string} Mermaid script
+   * Format:
+   *   flowchart TD
+   *   A["label"]          ← all nodes first
+   *   B["label"]
+   *   A --> B             ← then all edges
+   *   C -- text --> D     ← labeled edges use "-- text -->" syntax
    */
   function generateMermaid(model) {
     if (!model) return '';
@@ -48,38 +59,25 @@
     var direction = model.direction || 'TD';
     lines.push('flowchart ' + direction);
 
-    // Track which nodes have been defined (in an edge line)
-    var definedNodes = {};
-
-    // First, generate edge lines (which also define nodes inline)
-    if (model.edges && model.edges.length > 0) {
-      for (var i = 0; i < model.edges.length; i++) {
-        var edge = model.edges[i];
-        var fromNode = findNode(model.nodes, edge.from);
-        var toNode = findNode(model.nodes, edge.to);
-
-        var fromStr = fromNode ? generateNode(fromNode) : edge.from;
-        var toStr = toNode ? generateNode(toNode) : edge.to;
-
-        var edgeStr = edge.type || '-->';
-        if (edge.text) {
-          edgeStr = edgeStr + '|' + edge.text + '|';
-        }
-
-        lines.push('    ' + fromStr + ' ' + edgeStr + ' ' + toStr);
-
-        if (fromNode) definedNodes[fromNode.id] = true;
-        if (toNode) definedNodes[toNode.id] = true;
+    // 1. All node definitions
+    if (model.nodes && model.nodes.length > 0) {
+      for (var i = 0; i < model.nodes.length; i++) {
+        lines.push('    ' + generateNode(model.nodes[i]));
       }
     }
 
-    // Then, output standalone nodes (not referenced in any edge)
-    if (model.nodes && model.nodes.length > 0) {
-      for (var j = 0; j < model.nodes.length; j++) {
-        var node = model.nodes[j];
-        if (!definedNodes[node.id]) {
-          lines.push('    ' + generateNode(node));
+    // 2. All edge definitions (node IDs only, no inline definitions)
+    if (model.edges && model.edges.length > 0) {
+      for (var j = 0; j < model.edges.length; j++) {
+        var edge = model.edges[j];
+        var edgeStr;
+        if (edge.text) {
+          // "-- label -->" format
+          edgeStr = '-- ' + edge.text.trim() + ' ' + (edge.type || '-->');
+        } else {
+          edgeStr = edge.type || '-->';
         }
+        lines.push('    ' + edge.from + ' ' + edgeStr + ' ' + edge.to);
       }
     }
 
