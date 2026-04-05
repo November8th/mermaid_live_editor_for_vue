@@ -196,66 +196,31 @@ Vue.component('mermaid-preview', {
       }
     },
 
-    // ==================== EDGE PATH MAPPING ====================
+    // ==================== EDGE PATH MAPPING (Mermaid v11) ====================
 
     mapEdgePaths: function (svgEl) {
       var self = this;
       self.edgePathEls = [];
-      var edgePaths = svgEl.querySelectorAll('.edgePath');
       
-      var edgeOccurrences = {}; 
+      // Mermaid v11: edge paths are direct <path> children of <g class="edgePaths">
+      var edgePathsGroup = svgEl.querySelector('.edgePaths');
+      if (!edgePathsGroup) {
+        console.warn('[MermaidPreview] No .edgePaths group found in SVG');
+        return;
+      }
       
-      var sanitizeId = function(id) {
-        var parts = id.split('-');
-        if (parts.length >= 2 && parts[0] === 'flowchart') {
-          return parts.slice(1, -1).join('-') || parts[1];
-        }
-        return id;
-      };
+      var paths = edgePathsGroup.querySelectorAll(':scope > path');
+      console.log('[EDGE] Found', paths.length, 'edge paths in .edgePaths group');
 
-      for (var i = 0; i < edgePaths.length; i++) {
-        var edgeEl = edgePaths[i];
-        var fId = null;
-        var tId = null;
-        
-        var cls = edgeEl.getAttribute('class') || '';
-        var startMatch = cls.match(/LS-([^\s]+)/);
-        var endMatch = cls.match(/LE-([^\s]+)/);
-        
-        if (startMatch && endMatch) {
-           fId = sanitizeId(startMatch[1]);
-           tId = sanitizeId(endMatch[1]);
-        } else {
-           if (i < self.model.edges.length) {
-              fId = self.model.edges[i].from;
-              tId = self.model.edges[i].to;
-           }
-        }
-
-        var modelIdx = i;
-        if (fId && tId) {
-           var key = fId + '::' + tId;
-           edgeOccurrences[key] = (edgeOccurrences[key] || 0);
-           var foundCount = 0;
-           for(var m=0; m<self.model.edges.length; m++) {
-              if (self.model.edges[m].from === fId && self.model.edges[m].to === tId) {
-                 if (foundCount === edgeOccurrences[key]) {
-                    modelIdx = m;
-                    break;
-                 }
-                 foundCount++;
-              }
-           }
-           edgeOccurrences[key]++;
-        }
-
-        if (fId && tId) {
+      for (var i = 0; i < paths.length; i++) {
+        // In Mermaid v11 without individual wrappers, use index-based mapping
+        if (i < self.model.edges.length) {
           self.edgePathEls.push({
-            el: edgeEl,
-            path: (edgeEl.tagName && edgeEl.tagName.toLowerCase() === 'path') ? edgeEl : edgeEl.querySelector('path'),
-            fromId: fId,
-            toId: tId,
-            index: modelIdx
+            el: paths[i],
+            path: paths[i],
+            fromId: self.model.edges[i].from,
+            toId: self.model.edges[i].to,
+            index: i
           });
         } else {
           self.edgePathEls.push(null);
@@ -263,63 +228,94 @@ Vue.component('mermaid-preview', {
       }
     },
 
-    // ==================== EDGE HANDLERS & CONTEXT MENU ====================
+    // ==================== EDGE HANDLERS & CONTEXT MENU (Mermaid v11) ====================
 
     attachEdgeHandlers: function (svgEl) {
       var self = this;
-      var edges = svgEl.querySelectorAll('.edgePath');
       
-      for (var j = 0; j < edges.length; j++) {
-        (function (edgeEl, idxData) {
-          var path = (edgeEl.tagName && edgeEl.tagName.toLowerCase() === 'path') ? edgeEl : edgeEl.querySelector('path');
-          if (path) {
-            var ghost = path.cloneNode();
-            ghost.setAttribute('class', 'edge-click-area');
-            ghost.setAttribute('data-edge', j);
-            ghost.setAttribute('stroke', 'transparent');
-            ghost.setAttribute('stroke-width', '40');
-            ghost.setAttribute('fill', 'none');
-            ghost.style.cursor = 'pointer';
-            ghost.style.pointerEvents = 'stroke';
-            
-            // Append ghost strictly as a sibling so it inherently shares all SVG transforms/offsets!
-            path.parentNode.insertBefore(ghost, path);
-            
-            // Highlight effect handlers
-            ghost.addEventListener('mouseenter', function() { path.classList.add('edge-hovered'); });
-            ghost.addEventListener('mouseleave', function() { path.classList.remove('edge-hovered'); });
-            
-            // Re-bind to ghost
-            ghost.addEventListener('click', function(e) { 
-               e.preventDefault(); 
-               e.stopPropagation(); 
-               if(!idxData) return;
-               
-               // VERY IMPORTANT: Close the node menu if open
-               self.contextMenu = null;
-               self.editingNodeId = null;
-
-               var edgeIdx = idxData.index;
-               self.selectedEdgeIndex = edgeIdx;
-               self.selectedNodeId = null;
-               self.$emit('edge-selected', edgeIdx);
-               
-               self.edgeContextMenu = {
-                 x: e.clientX,
-                 y: e.clientY,
-                 edgeIndex: edgeIdx
-               };
-            });
-          }
+      // Mermaid v11: edge paths are direct <path> children of <g class="edgePaths">
+      var edgePathsGroup = svgEl.querySelector('.edgePaths');
+      if (!edgePathsGroup) return;
+      
+      // Force the container to accept pointer events
+      edgePathsGroup.style.pointerEvents = 'all';
+      
+      var paths = edgePathsGroup.querySelectorAll(':scope > path');
+      
+      for (var j = 0; j < paths.length; j++) {
+        (function (path, idxData, edgeIndex) {
+          // Create invisible thick ghost path for click detection
+          var ghost = path.cloneNode(false);
+          ghost.removeAttribute('id');
+          ghost.removeAttribute('marker-end');
+          ghost.removeAttribute('marker-start');
+          ghost.setAttribute('class', 'edge-click-area');
+          ghost.setAttribute('data-edge-index', edgeIndex);
+          ghost.setAttribute('stroke', 'transparent');
+          ghost.setAttribute('stroke-width', '40');
+          ghost.setAttribute('fill', 'none');
+          ghost.style.cursor = 'pointer';
+          ghost.style.pointerEvents = 'stroke';
           
+          // Append ghost AFTER all paths (on top in SVG z-order)
+          edgePathsGroup.appendChild(ghost);
+          
+          // Highlight effect handlers
+          ghost.addEventListener('mouseenter', function() { path.classList.add('edge-hovered'); });
+          ghost.addEventListener('mouseleave', function() { path.classList.remove('edge-hovered'); });
+          
+          // Click handler on ghost (primary)
+          ghost.addEventListener('click', function(e) { 
+             e.preventDefault(); 
+             e.stopPropagation(); 
+             if (!idxData) return;
+             
+             self.contextMenu = null;
+             self.editingNodeId = null;
+
+             var edgeIdx = idxData.index;
+             self.selectedEdgeIndex = edgeIdx;
+             self.selectedNodeId = null;
+             self.$emit('edge-selected', edgeIdx);
+             
+             self.edgeContextMenu = {
+               x: e.clientX,
+               y: e.clientY,
+               edgeIndex: edgeIdx
+             };
+          });
+          
+          // Also make the original visible path clickable as fallback
           path.style.cursor = 'pointer';
-        })(edges[j], self.edgePathEls[j]);
+          path.style.pointerEvents = 'stroke';
+          path.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            if (!idxData) return;
+            
+            self.contextMenu = null;
+            self.editingNodeId = null;
+
+            var edgeIdx = idxData.index;
+            self.selectedEdgeIndex = edgeIdx;
+            self.selectedNodeId = null;
+            self.$emit('edge-selected', edgeIdx);
+            
+            self.edgeContextMenu = {
+              x: e.clientX,
+              y: e.clientY,
+              edgeIndex: edgeIdx
+            };
+          });
+        })(paths[j], self.edgePathEls[j], j);
       }
       
+      // Make edge labels clickable too
       var labels = svgEl.querySelectorAll('.edgeLabel');
       for (var l = 0; l < labels.length; l++) {
         (function (labelEl) {
           labelEl.style.cursor = 'pointer';
+          labelEl.style.pointerEvents = 'all';
           labelEl.addEventListener('click', function(e) {
              e.preventDefault(); e.stopPropagation();
              var txt = (labelEl.textContent || '').trim();
@@ -328,7 +324,6 @@ Vue.component('mermaid-preview', {
                 if(self.model.edges[m].text && self.model.edges[m].text.trim() === txt) { idx = m; break; }
              }
              if (idx !== -1) {
-               // Close node menu
                self.contextMenu = null;
                self.editingNodeId = null;
 
