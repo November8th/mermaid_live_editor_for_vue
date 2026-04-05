@@ -66,7 +66,7 @@
         }, 180);
       });
 
-      // 좌클릭은 선택만 담당하고, node 액션은 우클릭/더블클릭으로 분리한다.
+      // 좌클릭은 선택 + 수정 메뉴를 연다.
       nodeEl.addEventListener('click', function (e) {
         if (e.button !== 0) return;
         e.preventDefault();
@@ -74,7 +74,8 @@
         ctx.setState({
           selectedNodeId:    nodeId,
           selectedEdgeIndex: null,
-          edgeToolbar:   null
+          edgeToolbar:   null,
+          contextMenu:   { nodeId: nodeId, x: e.clientX, y: e.clientY }
         });
         ctx.emit('node-selected', nodeId);
       });
