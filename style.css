@@ -4,7 +4,7 @@
 
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 
-/* ---- CSS Custom Properties ---- */
+/* ---- CSS 커스텀 속성 ---- */
 :root {
   --bg-primary: #0f1117;
   --bg-secondary: #161822;
@@ -47,7 +47,7 @@
   --font-mono: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
 }
 
-/* ---- Reset & Base ---- */
+/* ---- 리셋 및 기본 스타일 ---- */
 *, *::before, *::after {
   box-sizing: border-box;
   margin: 0;
@@ -71,7 +71,7 @@ body {
   flex-direction: column;
 }
 
-/* ---- App Header ---- */
+/* ---- 앱 헤더 ---- */
 .app-header {
   display: flex;
   align-items: center;
@@ -122,7 +122,7 @@ body {
   text-transform: uppercase;
 }
 
-/* ---- Main Split Layout ---- */
+/* ---- 메인 분할 레이아웃 ---- */
 .editor-container {
   display: flex;
   flex: 1;
@@ -130,7 +130,7 @@ body {
   position: relative;
 }
 
-/* ---- Left Panel: Script Editor ---- */
+/* ---- 왼쪽 패널: 스크립트 에디터 ---- */
 .panel {
   display: flex;
   flex-direction: column;
@@ -185,7 +185,7 @@ body {
   50% { opacity: 0.4; }
 }
 
-/* ---- Code Editor Textarea ---- */
+/* ---- 코드 에디터 텍스트영역 ---- */
 .code-editor {
   flex: 1;
   display: flex;
@@ -236,7 +236,7 @@ body {
   background: var(--text-muted);
 }
 
-/* ---- Error Display ---- */
+/* ---- 에러 표시 ---- */
 .code-editor__error {
   padding: 8px 16px;
   font-size: 12px;
@@ -261,7 +261,7 @@ body {
   flex-shrink: 0;
 }
 
-/* ---- Toolbar ---- */
+/* ---- 툴바 ---- */
 .toolbar {
   display: flex;
   align-items: center;
@@ -354,7 +354,7 @@ body {
   border-color: var(--border-focus);
 }
 
-/* ---- Preview/Diagram Area ---- */
+/* ---- 프리뷰 / 다이어그램 영역 ---- */
 .preview-area {
   flex: 1;
   overflow: auto;
@@ -418,7 +418,7 @@ body {
   font-weight: 500;
 }
 
-/* ---- SVG Node Interactivity ---- */
+/* ---- SVG 노드 인터랙션 ---- */
 .preview-area__canvas .node {
   cursor: grab;
   transition: filter var(--transition-fast);
@@ -444,7 +444,7 @@ body {
   stroke-width: 3px !important;
 }
 
-/* ---- Node Inline Edit ---- */
+/* ---- 노드 인라인 편집 ---- */
 .node-edit-overlay {
   position: fixed;
   z-index: 1000;
@@ -468,7 +468,7 @@ body {
   min-width: 100px;
 }
 
-/* ---- Edge Creation Mode ---- */
+/* ---- 엣지 생성 모드 ---- */
 .edge-mode-overlay {
   position: absolute;
   top: 12px;
@@ -497,7 +497,7 @@ body {
   }
 }
 
-/* ---- Context Menu ---- */
+/* ---- 컨텍스트 메뉴 ---- */
 .context-menu {
   position: fixed;
   z-index: 2000;
@@ -557,7 +557,7 @@ body {
   font-size: 14px;
 }
 
-/* ---- Resize Handle ---- */
+/* ---- 리사이즈 핸들 ---- */
 .resize-handle {
   width: 5px;
   cursor: col-resize;
@@ -574,7 +574,7 @@ body {
   box-shadow: var(--shadow-glow);
 }
 
-/* ---- Toast Notification ---- */
+/* ---- 토스트 알림 ---- */
 .toast {
   position: fixed;
   bottom: 20px;
@@ -616,7 +616,7 @@ body {
   to { opacity: 0; transform: translateY(20px); }
 }
 
-/* ---- Scrollbar Global ---- */
+/* ---- 전역 스크롤바 ---- */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
@@ -635,12 +635,12 @@ body {
   background: var(--text-muted);
 }
 
-/* ---- Mermaid SVG overrides ---- */
+/* ---- Mermaid SVG 오버라이드 ---- */
 .preview-area__canvas .mermaid-output .label {
   font-family: var(--font-sans) !important;
 }
 
-/* ---- Connection Ports ---- */
+/* ---- 연결 포트 ---- */
 .conn-port {
   transition: r 0.15s ease, opacity 0.15s ease;
   opacity: 0.85;
@@ -685,7 +685,7 @@ body {
   opacity: 0.6;
 }
 
-/* ---- Drag Edge Line ---- */
+/* ---- 드래그 엣지 라인 ---- */
 .drag-edge-line {
   pointer-events: none;
   animation: dashOffset 0.8s linear infinite;
@@ -696,7 +696,7 @@ body {
   to { stroke-dashoffset: 20; }
 }
 
-/* ---- SVG Node & Edge Highlights ---- */
+/* ---- SVG 노드 / 엣지 강조 ---- */
 .preview-area__canvas .node.dragging {
   cursor: grabbing !important;
   filter: brightness(1.2) drop-shadow(0 0 16px var(--accent-glow));
@@ -712,7 +712,7 @@ body {
   stroke-width: 3.5px !important;
 }
 
-/* --- OVERRIDE MERMAID DEFAULT BLOCKERS --- */
+/* --- Mermaid 기본 blocker 오버라이드 --- */
 .preview-area__canvas .edgePaths,
 .preview-area__canvas .edgePath {
   pointer-events: all !important;
@@ -726,7 +726,7 @@ body {
 }
 
 .preview-area__canvas .edgePath path:not(.edge-click-area) {
-  pointer-events: none !important; /* Let clicks pass to the thick ghost path */
+  pointer-events: none !important; /* 클릭이 두꺼운 ghost path로 통과되게 한다. */
 }
 
 .preview-area__canvas .edgeLabels {
@@ -736,7 +736,7 @@ body {
   pointer-events: auto !important;
 }
 
-/* ---- Context Menu Additions ---- */
+/* ---- 컨텍스트 메뉴 확장 ---- */
 .context-menu__section-title {
   font-size: 11px;
   color: var(--text-muted);
@@ -774,7 +774,7 @@ body {
   transform: translateY(-1px);
 }
 
-/* ---- Shape Grid (context menu) ---- */
+/* ---- Shape 그리드 (컨텍스트 메뉴) ---- */
 .context-menu__shapes-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -792,7 +792,7 @@ body {
   text-overflow: ellipsis;
 }
 
-/* ---- 4-direction Ports ---- */
+/* ---- 4방향 포트 ---- */
 .conn-port {
   fill: var(--accent-secondary);
   stroke: white;
@@ -811,7 +811,7 @@ body {
   pointer-events: none;
 }
 
-/* Port drag snap target */
+/* 포트 드래그 스냅 타깃 */
 .preview-area__canvas .node.port-drag-target rect,
 .preview-area__canvas .node.port-drag-target circle,
 .preview-area__canvas .node.port-drag-target polygon,
@@ -821,12 +821,12 @@ body {
   stroke-width: 2.5px !important;
 }
 
-/* Node hover highlight */
+/* 노드 hover 강조 */
 .preview-area__canvas .node.node-hovered > * {
   filter: brightness(1.15);
 }
 
-/* ---- Toolbar disabled ---- */
+/* ---- 비활성화된 툴바 버튼 ---- */
 .toolbar__btn:disabled {
   opacity: 0.3;
   cursor: not-allowed;
@@ -834,7 +834,7 @@ body {
   box-shadow: none !important;
 }
 
-/* ---- Toast notification ---- */
+/* ---- 토스트 알림 ---- */
 .toast {
   position: fixed;
   bottom: 24px;
@@ -860,7 +860,7 @@ body {
 .toast.toast--success { border-color: var(--success); color: var(--success); }
 .toast.toast--error   { border-color: var(--error);   color: var(--error);   }
 
-/* ---- Edge floating toolbar ---- */
+/* ---- 엣지 플로팅 툴바 ---- */
 .edge-toolbar {
   position: fixed;
   transform: translate(-50%, calc(-100% - 10px));

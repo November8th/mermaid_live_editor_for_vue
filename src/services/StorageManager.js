@@ -5,11 +5,11 @@
 
   var StorageManager = {
     save: function (data) {
-      // data = { script: string, editorWidth: number }
+      // 에디터 내용과 좌우 패널 비율만 로컬에 저장한다.
       try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
       } catch (e) {
-        // quota exceeded or unavailable — silently ignore
+        // 용량 초과나 접근 불가 상황은 조용히 무시한다.
       }
     },
 

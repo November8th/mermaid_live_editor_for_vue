@@ -1,12 +1,12 @@
 /**
- * Mermaid Flowchart Parser
- * Parses Mermaid flowchart/graph syntax into an internal model.
+ * Mermaid 플로우차트 파서
+ * Mermaid flowchart/graph 문법을 내부 모델로 변환한다.
  */
 
 (function (global) {
   'use strict';
 
-  // Shape definitions: [openBracket, closeBracket, shapeName]
+  // shape 정의: [여는 bracket, 닫는 bracket, shape 이름]
   var SHAPE_MAP = [
     { open: '((', close: '))', shape: 'double_circle' },
     { open: '([', close: '])', shape: 'stadium' },
@@ -23,16 +23,18 @@
     { open: '[', close: ']', shape: 'rect' },
   ];
 
-  // Edge type definitions
-  // NOTE: "-- label -->" patterns MUST come before plain "-->" patterns
-  // because "-->" also starts with "--".
+  // 엣지 파싱 패턴.
+  // 순서가 중요하다. label 포함 패턴이 plain edge보다 먼저 와야
+  // "-->" 앞부분에서 잘못 소비되지 않는다.
+  // 주의: "-- label -->" 패턴은 plain "-->" 보다 먼저 와야 한다.
+  // "-->" 역시 "--"로 시작하므로 순서가 바뀌면 앞에서 잘못 소비된다.
   var EDGE_PATTERNS = [
-    // "-- label -->" / "== label ==>" alternative label syntax
+    // "-- label -->" / "== label ==>" 형태의 대체 레이블 문법
     { regex: /^==\s+(.+?)\s*==>/, type: '==>', hasLabel: true },
     { regex: /^--\s+(.+?)\s*-->/, type: '-->', hasLabel: true },
     { regex: /^--\s+(.+?)\s*-\.->/, type: '-.->',  hasLabel: true },
     { regex: /^--\s+(.+?)\s*---/, type: '---', hasLabel: true },
-    // Pipe-label syntax: -->|label|
+    // 파이프 레이블 문법: -->|label|
     { regex: /^==>\|([^|]*)\|/, type: '==>', hasLabel: true },
     { regex: /^==>\s*/, type: '==>', hasLabel: false },
     { regex: /^-->\|([^|]*)\|/, type: '-->', hasLabel: true },
@@ -48,14 +50,14 @@
   ];
 
   /**
-   * Parse a single node definition from a string starting at position.
-   * Returns { id, text, shape, endIndex } or null.
+   * 주어진 문자열 시작 위치에서 노드 정의 1개를 파싱한다.
+   * 반환값: { id, text, shape, endIndex } 또는 null
    */
   function parseNodeDef(str) {
     str = str.trim();
     if (!str) return null;
 
-    // Extract node ID (alphanumeric + underscore)
+    // node id 추출
     var idMatch = str.match(/^([a-zA-Z_\u3131-\uD79D][a-zA-Z0-9_\u3131-\uD79D]*)/);
     if (!idMatch) return null;
 
@@ -66,7 +68,8 @@
       return { id: id, text: id, shape: 'rect', endIndex: id.length, raw: id };
     }
 
-    // Try each shape
+    // shape별 bracket 조합을 순서대로 검사한다.
+    // 길이가 긴 토큰이 앞에 있으므로 [[ ]] 와 [ ]가 섞여도 긴 쪽이 먼저 잡힌다.
     for (var i = 0; i < SHAPE_MAP.length; i++) {
       var shapeDef = SHAPE_MAP[i];
       if (rest.indexOf(shapeDef.open) === 0) {
@@ -74,15 +77,15 @@
         var innerStart = rest.substring(openLen);
         var text, totalLen, closeIdx;
 
-        // Quoted text: "..." — find the closing quote THEN the bracket.
-        // This handles labels that contain the bracket character itself.
+        // quoted label은 단순히 첫 닫는 bracket을 찾으면 안 된다.
+        // 예: A["char (*buf)[16]"] 에서 ]는 텍스트 일부이므로, 실제 닫힘은 "] 시퀀스다.
         if (innerStart.charAt(0) === '"') {
           var closeSeq = '"' + shapeDef.close;
           var seqIdx = rest.indexOf(closeSeq, openLen + 1);
           if (seqIdx !== -1) {
             text = rest.substring(openLen + 1, seqIdx)
               .replace(/\\"/g, '"')
-              .replace(/\\\\/g, '\\'); // strip surrounding quotes
+              .replace(/\\\\/g, '\\'); // 양끝 quote 제거 후 escape 복원
             totalLen = id.length + seqIdx + closeSeq.length;
             return {
               id: id,
@@ -94,7 +97,7 @@
           }
         }
 
-        // Unquoted text — find the first closing bracket
+        // quote가 없는 경우 첫 닫는 bracket을 기준으로 읽는다.
         closeIdx = rest.indexOf(shapeDef.close, openLen);
         if (closeIdx !== -1) {
           text = rest.substring(openLen, closeIdx).trim();
@@ -114,8 +117,8 @@
   }
 
   /**
-   * Parse edge from remaining string.
-   * Returns { type, label, endIndex } or null.
+   * 남은 문자열에서 edge를 파싱한다.
+   * 반환값: { type, label, endIndex } 또는 null
    */
   function parseEdge(str) {
     str = str.trim();
@@ -134,8 +137,8 @@
   }
 
   /**
-   * Parse a line that may contain chained node-edge-node definitions.
-   * e.g. A[Start] --> B[Process] --> C[End]
+   * node-edge-node가 연쇄된 한 줄을 파싱한다.
+   * 예: A[Start] --> B[Process] --> C[End]
    */
   function parseFlowLine(line, model) {
     line = line.trim();
@@ -148,17 +151,17 @@
       remaining = remaining.trim();
       if (!remaining) break;
 
-      // Try to parse a node
+      // 현재 위치에서 노드 1개를 읽는다.
       var node = parseNodeDef(remaining);
       if (!node) break;
 
-      // Register node if not exists
+      // 노드가 처음 나오면 등록한다.
       if (!model._nodeMap[node.id]) {
         var nodeObj = { id: node.id, text: node.text, shape: node.shape };
         model.nodes.push(nodeObj);
         model._nodeMap[node.id] = nodeObj;
       } else {
-        // Update text/shape if explicitly defined
+        // 이미 있던 노드라도 텍스트/shape가 명시돼 있으면 갱신한다.
         if (node.text !== node.id || node.shape !== 'rect') {
           model._nodeMap[node.id].text = node.text;
           model._nodeMap[node.id].shape = node.shape;
@@ -167,7 +170,8 @@
 
       remaining = remaining.substring(node.endIndex).trim();
 
-      // If there was a previous node and an edge pending, create the edge
+      // chained 문법(A --> B --> C)을 지원하기 위해
+      // 직전에 읽어 둔 pending edge가 있으면 지금 노드와 연결한다.
       if (prevNodeId !== null && model._pendingEdge) {
         model.edges.push({
           from: prevNodeId,
@@ -178,7 +182,8 @@
         model._pendingEdge = null;
       }
 
-      // Try to parse an edge after this node
+      // 현재 노드 뒤에 엣지가 이어지면 pending 상태로 보관하고,
+      // 다음 루프에서 읽은 노드와 연결한다.
       var edge = parseEdge(remaining);
       if (edge) {
         model._pendingEdge = edge;
@@ -193,9 +198,9 @@
   }
 
   /**
-   * Main parse function.
-   * @param {string} script - Mermaid script string
-   * @returns {object} Internal model { type, direction, nodes, edges }
+   * 메인 파싱 함수
+   * @param {string} script - Mermaid 스크립트 문자열
+   * @returns {object} 내부 모델 { type, direction, nodes, edges }
    */
   function parseMermaid(script) {
     if (!script || typeof script !== 'string') {
@@ -217,16 +222,16 @@
     for (var i = 0; i < lines.length; i++) {
       var line = lines[i].trim();
 
-      // Skip empty lines and comments
+      // 빈 줄과 주석은 건너뛴다.
       if (!line || line.indexOf('%%') === 0) continue;
 
-      // Skip classDef and class lines
+      // classDef / class 라인은 현재 모델에 반영하지 않는다.
       if (line.indexOf('classDef') === 0 || line.indexOf('class ') === 0) continue;
       
-      // Skip style lines
+      // style 라인도 현재는 무시한다.
       if (line.indexOf('style ') === 0) continue;
 
-      // Parse header line
+      // 헤더(flowchart/graph + direction) 파싱
       if (!started) {
         var headerMatch = line.match(/^(?:graph|flowchart)\s+(TD|TB|BT|LR|RL)/i);
         if (headerMatch) {
@@ -235,7 +240,7 @@
           started = true;
           continue;
         }
-        // Also handle just "graph" or "flowchart" without direction
+        // 방향 없이 graph / flowchart만 있는 경우도 허용
         if (/^(?:graph|flowchart)\s*$/.test(line)) {
           started = true;
           continue;
@@ -243,21 +248,21 @@
       }
 
       if (started) {
-        // Handle subgraph (skip for now but don't break)
+        // subgraph는 지금은 건너뛰되 파싱 자체가 깨지지 않게만 처리
         if (line.indexOf('subgraph') === 0 || line === 'end') continue;
 
         parseFlowLine(line, model);
       }
     }
 
-    // Clean up internal properties
+    // 내부 임시 상태 제거
     delete model._nodeMap;
     delete model._pendingEdge;
 
     return model;
   }
 
-  // Export
+  // 전역 노출
   global.MermaidParser = {
     parse: parseMermaid
   };

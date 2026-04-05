@@ -1,12 +1,12 @@
 /**
- * MermaidLiveEditor Component (v2)
- * Main state container: bidirectional script ↔ model sync,
- * HistoryManager (undo/redo), StorageManager (auto-save).
+ * MermaidLiveEditor 컴포넌트
+ * script ↔ model 양방향 동기화와 undo/redo, autosave를 담당하는 최상위 상태 컨테이너
  */
 
 Vue.component('mermaid-live-editor', {
   data: function () {
     return {
+      // script는 원본 소스, model은 GUI 편집용 정규화 상태다.
       script: 'flowchart TD\n    A[Start] --> B{Decision}\n    B -->|Yes| C[Process A]\n    B -->|No| D[Process B]\n    C --> E[End]\n    D --> E',
       model:  { type: 'flowchart', direction: 'TD', nodes: [], edges: [] },
       error:  '',
@@ -19,10 +19,10 @@ Vue.component('mermaid-live-editor', {
       resizing:    false,
       editorWidth: 38,
 
-      // HistoryManager instance (created in mounted)
+      // mounted에서 생성되는 HistoryManager 인스턴스
       history: null,
 
-      // Toast
+      // 토스트 메시지 상태
       toastMsg:     '',
       toastVisible: false,
       _toastTimer:  null,
@@ -38,7 +38,7 @@ Vue.component('mermaid-live-editor', {
   mounted: function () {
     this.history = new HistoryManager();
 
-    // Restore from localStorage
+    // localStorage에서 마지막 작업 내용 복원
     var saved = StorageManager.load();
     if (saved && saved.script) {
       this.script = saved.script;
@@ -54,7 +54,7 @@ Vue.component('mermaid-live-editor', {
       self.updateNodeCounter();
     });
 
-    // Auto-save on script change (debounced 600ms)
+    // script 변경 시 600ms debounce 후 자동 저장
     this.$watch('script', function () {
       clearTimeout(self._saveTimer);
       self._saveTimer = setTimeout(function () {
@@ -68,13 +68,14 @@ Vue.component('mermaid-live-editor', {
 
   methods: {
 
-    // ── Snapshot helper (call before every mutation) ──────────────
+    // ── 스냅샷 헬퍼 ───────────────────────────────────────────────
     _snapshot: function () {
       if (this.history) this.history.snapshot(this.model);
     },
 
     // ── Script → Model ────────────────────────────────────────────
     onScriptChange: function (newScript) {
+      // GUI 쪽에서 script를 다시 생성한 직후에는 역파싱 루프를 막는다.
       if (this.syncSource === 'gui') {
         this.syncSource = null;
         return;
@@ -95,6 +96,7 @@ Vue.component('mermaid-live-editor', {
 
     // ── Model → Script ────────────────────────────────────────────
     updateScriptFromModel: function () {
+      // model 변경은 항상 script까지 다시 직렬화해서 양쪽 상태를 맞춘다.
       this.syncSource = 'gui';
       this.script     = MermaidGenerator.generate(this.model);
       this.error      = '';
@@ -113,11 +115,12 @@ Vue.component('mermaid-live-editor', {
       if (max > this.nodeCounter) this.nodeCounter = max;
     },
 
-    // ── GUI Actions ───────────────────────────────────────────────
+    // ── GUI 액션 ─────────────────────────────────────────────────
 
     addNode: function (shape) {
       this._snapshot();
       if (!shape) shape = 'rect';
+      // 새 노드 id는 단순 증가 방식으로 발급한다.
       this.nodeCounter++;
       var newId   = 'N' + this.nodeCounter;
       var newNode = { id: newId, text: 'Node', shape: shape };
@@ -139,6 +142,7 @@ Vue.component('mermaid-live-editor', {
       if (!data) return;
       this._snapshot();
 
+      // node 삭제는 연결된 edge까지 같이 정리해야 모델이 깨지지 않는다.
       if (data.nodeId) {
         var nodes = this.model.nodes.filter(function (n) { return n.id !== data.nodeId; });
         var edges = this.model.edges.filter(function (e) {
@@ -189,7 +193,7 @@ Vue.component('mermaid-live-editor', {
       this.updateScriptFromModel();
     },
 
-    // ── Undo / Redo ───────────────────────────────────────────────
+    // ── Undo / Redo ──────────────────────────────────────────────
 
     undo: function () {
       if (!this.history) return;
@@ -209,7 +213,7 @@ Vue.component('mermaid-live-editor', {
       this.script     = MermaidGenerator.generate(this.model);
     },
 
-    // ── Selection tracking ────────────────────────────────────────
+    // ── 선택 상태 추적 ──────────────────────────────────────────
 
     onNodeSelected: function (nodeId) {
       this.selectedNode = nodeId;
@@ -221,7 +225,7 @@ Vue.component('mermaid-live-editor', {
       this.selectedNode = '';
     },
 
-    // ── Toolbar helpers ───────────────────────────────────────────
+    // ── 툴바 액션 연결 ───────────────────────────────────────────
 
     fitView: function () {
       if (this.$refs.preview) this.$refs.preview.fitView();
@@ -282,7 +286,7 @@ Vue.component('mermaid-live-editor', {
       }, 2800);
     },
 
-    // ── Resize handle ─────────────────────────────────────────────
+    // ── 리사이즈 핸들 ───────────────────────────────────────────
 
     startResize: function (e) {
       e.preventDefault();
@@ -332,6 +336,7 @@ Vue.component('mermaid-live-editor', {
           @mousedown="startResize"\
         ></div>\
         <div class="panel panel--preview">\
+          <!-- 상단 toolbar는 preview 네비게이션과 편집 액션을 묶는다. -->\
           <mermaid-toolbar\
             :direction="model.direction"\
             :can-undo="canUndo"\

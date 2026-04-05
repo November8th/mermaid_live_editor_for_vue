@@ -1,5 +1,6 @@
 /**
- * MermaidToolbar Component (v2: minimal — Undo/Redo/Direction/Fit/Export)
+ * MermaidToolbar 컴포넌트
+ * Undo/Redo, 방향 변경, 줌, 전체 맞춤, SVG 복사를 제공한다.
  */
 
 Vue.component('mermaid-toolbar', {
@@ -20,6 +21,7 @@ Vue.component('mermaid-toolbar', {
   },
   template: '\
     <div class="toolbar">\
+      <!-- 좌측은 구조 편집, 우측은 뷰포트 조작 성격으로 묶는다. -->\
       <div class="toolbar__group">\
         <button class="toolbar__btn" @click="addNode" title="Add Node (or double-click canvas)">\
           <span class="toolbar__btn-icon">＋</span> Node\

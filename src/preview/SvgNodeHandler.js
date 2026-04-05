@@ -1,7 +1,7 @@
 (function (global) {
   'use strict';
 
-  // All 13 shapes the parser supports
+  // 파서가 지원하는 13개 shape 목록
   var SHAPES = [
     { key: 'rect',              label: '[ ]',     name: 'Rectangle' },
     { key: 'round',             label: '( )',     name: 'Rounded' },
@@ -21,8 +21,8 @@
   var SvgNodeHandler = {
     SHAPES: SHAPES,
 
-    // Attach interaction to all .node elements in svgEl
-    // ctx = bridge object from MermaidPreview._buildCtx()
+    // svgEl 안의 모든 .node에 인터랙션 연결
+    // ctx = MermaidPreview._buildCtx()가 만든 bridge 객체
     attach: function (svgEl, positions, elements, ctx) {
       var nodes = svgEl.querySelectorAll('.node');
       for (var i = 0; i < nodes.length; i++) {
@@ -36,7 +36,7 @@
 
       nodeEl.style.cursor = 'pointer';
 
-      // HOVER → show 4 ports
+      // hover 중에만 포트를 띄워 canvas를 과하게 복잡하게 만들지 않는다.
       nodeEl.addEventListener('mouseenter', function () {
         ctx.setState({ hoveredNodeId: nodeId });
         nodeEl.classList.add('node-hovered');
@@ -46,7 +46,7 @@
       nodeEl.addEventListener('mouseleave', function (e) {
         nodeEl.classList.remove('node-hovered');
         var rel = e.relatedTarget;
-        // Don't clear ports if cursor moved to a port or stayed in the overlay
+        // 커서가 포트나 overlay로 이동한 경우 포트를 바로 지우지 않는다.
         if (rel) {
           if (rel.classList && (
                 rel.classList.contains('conn-port') ||
@@ -66,7 +66,7 @@
         }, 180);
       });
 
-      // SINGLE CLICK → select (no context menu on left click to avoid noise)
+      // 좌클릭은 선택만 담당하고, node 액션은 우클릭/더블클릭으로 분리한다.
       nodeEl.addEventListener('click', function (e) {
         if (e.button !== 0) return;
         e.preventDefault();
@@ -79,7 +79,7 @@
         ctx.emit('node-selected', nodeId);
       });
 
-      // DOUBLE CLICK → inline edit
+      // 더블클릭 → 인라인 편집
       nodeEl.addEventListener('dblclick', function (e) {
         e.preventDefault();
         e.stopPropagation();
@@ -87,7 +87,7 @@
         SvgNodeHandler.startInlineEdit(nodeId, nodeEl, ctx);
       });
 
-      // RIGHT CLICK → context menu
+      // 우클릭 → 컨텍스트 메뉴
       nodeEl.addEventListener('contextmenu', function (e) {
         e.preventDefault();
         e.stopPropagation();
@@ -97,7 +97,7 @@
         });
       });
 
-      // Keep selection class in sync
+      // 선택 상태 클래스 동기화
       ctx.watchSelection(nodeId, nodeEl);
     },
 

@@ -7,13 +7,15 @@
     _overlay:   null,
     _dragLine:  null,
 
-    // Call once per render, after SVG is in the DOM
+    // 매 렌더 후 SVG가 DOM에 붙은 뒤 한 번 호출
     initOverlay: function (svgEl) {
+      // 포트는 엣지 보조 클릭선보다 항상 위에서 클릭돼야 하므로 전용 레이어를 둔다.
       var old = svgEl.querySelector('#conn-port-overlay');
       if (old) old.remove();
 
       var overlay = document.createElementNS('http://www.w3.org/2000/svg', 'g');
       overlay.setAttribute('id', 'conn-port-overlay');
+      // 그룹 전체가 이벤트를 먹지 않고, 실제 포트 클릭 타깃만 이벤트를 받게 한다.
       overlay.style.pointerEvents = 'none';
       svgEl.appendChild(overlay);
       this._overlay = overlay;
@@ -29,9 +31,10 @@
       this._dragLine = dragLine;
     },
 
-    // Show 4 port circles around a node
+    // 노드 주변에 4방향 포트 표시
     showPorts: function (svgEl, nodeId, positions, ctx) {
       if (!this._overlay) return;
+      // hover 중 다른 레이어가 추가돼도 포트가 항상 최상단에 오도록 재부착한다.
       this._bringOverlayToFront(svgEl);
       this.clearPorts();
 
@@ -54,14 +57,15 @@
 
           var onPointerEnter = function () {
             setHovered(true);
-            ctx.setState({ portDragging: ctx.getState().portDragging }); // keep alive
+            ctx.setState({ portDragging: ctx.getState().portDragging }); // hover 유지
           };
 
           var onPointerLeave = function () {
             setHovered(false);
           };
 
-          // Invisible hit target
+          // 보이는 포트 원은 작게 유지하고,
+          // 실제 클릭은 더 큰 보이지 않는 hit 원이 담당한다.
           var hit = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
           hit.setAttribute('class', 'conn-port-hit');
           hit.setAttribute('cx', pt.x);
@@ -73,7 +77,7 @@
           hit.style.pointerEvents = 'all';
           self._overlay.appendChild(hit);
 
-          // Glow halo
+          // glow 원
           var glow = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
           glow.setAttribute('class', 'conn-port-glow');
           glow.setAttribute('cx', pt.x);
@@ -82,7 +86,7 @@
           glow.style.pointerEvents = 'none';
           self._overlay.appendChild(glow);
 
-          // Port dot
+          // 보이는 포트 원
           var circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
           circle.setAttribute('class', 'conn-port');
           circle.setAttribute('cx', pt.x);
@@ -103,6 +107,7 @@
 
     _startDrag: function (svgEl, fromNodeId, fromPt, positions, ctx) {
       var self = this;
+      // 드래그 시작 직전에도 레이어를 맨 위로 올려 엣지 클릭 영역과 충돌하지 않게 한다.
       self._bringOverlayToFront(svgEl);
       ctx.setState({ portDragging: true });
 
@@ -141,7 +146,7 @@
           ctx.emit('add-edge', { from: fromNodeId, to: target });
         }
 
-        // Re-show ports on the source node if still hovered
+        // 여전히 hover 중이면 원래 노드 포트를 다시 표시
         setTimeout(function () {
           if (ctx.getState().hoveredNodeId === fromNodeId) {
             self.showPorts(svgEl, fromNodeId, positions, ctx);
@@ -153,7 +158,8 @@
       document.addEventListener('mouseup', onUp);
     },
 
-    // Returns nodeId if (x,y) is inside or near a node, else null
+    // 포트 드래그 중에는 target node를 약간 관대하게 판정한다.
+    // 정확히 bbox 안이 아니어도 center 근처면 snap 대상으로 본다.
     _findHitNode: function (x, y, excludeId, positions) {
       var SNAP = 28;
       var best = null;
@@ -163,7 +169,7 @@
         if (nodeId === excludeId) continue;
         var p = positions[nodeId];
 
-        // Inside bounding box
+        // bbox 안이면 즉시 target으로 인정
         if (x >= p.origTx + p.bboxX - 4 &&
             x <= p.origTx + p.bboxX + p.width  + 4 &&
             y >= p.origTy + p.bboxY - 4 &&
@@ -171,7 +177,7 @@
           return nodeId;
         }
 
-        // Near center
+        // 중심 근처면 snap 후보로 인정
         var d = Math.sqrt((x - p.cx) * (x - p.cx) + (y - p.cy) * (y - p.cy));
         if (d < SNAP && d < bestDist) {
           bestDist = d;
@@ -183,7 +189,7 @@
     },
 
     _highlightTarget: function (svgEl, nodeId) {
-      // Use extractNodeId (which handles Mermaid 11's prefixed IDs) to find the right node
+      // Mermaid 11의 prefix 포함 id도 처리하는 extractNodeId를 사용한다.
       var all = svgEl.querySelectorAll('.node');
       for (var j = 0; j < all.length; j++) {
         if (SvgPositionTracker.extractNodeId(all[j]) === nodeId) {
@@ -207,6 +213,8 @@
     },
 
     _bringOverlayToFront: function (svgEl) {
+      // appendChild를 다시 호출하면 SVG 내에서 가장 마지막 형제로 이동하므로
+      // 레이어상 최상단으로 올릴 수 있다.
       if (this._overlay && this._overlay.parentNode === svgEl) {
         svgEl.appendChild(this._overlay);
       }

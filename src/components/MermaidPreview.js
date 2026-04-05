@@ -1,9 +1,9 @@
 /**
- * MermaidPreview Component (v5: Thin shell — delegates to service objects)
- * - SvgPositionTracker : coordinate extraction
- * - PortDragHandler    : 4-direction ports + drag-to-connect
- * - SvgNodeHandler     : node click / dblclick / right-click / hover
- * - SvgEdgeHandler     : edge click / dblclick / right-click / label
+ * MermaidPreview 컴포넌트
+ * - SvgPositionTracker : 좌표 추출
+ * - PortDragHandler    : 4방향 포트와 drag-to-connect
+ * - SvgNodeHandler     : 노드 클릭 / 더블클릭 / 우클릭 / hover
+ * - SvgEdgeHandler     : 엣지 클릭 / 레이블 / 편집
  */
 
 Vue.component('mermaid-preview', {
@@ -16,7 +16,7 @@ Vue.component('mermaid-preview', {
     }
   },
 
-  // Shapes list exposed for template (full 13-shape grid)
+  // 템플릿에서 사용하는 전체 shape 목록
   SHAPES: SvgNodeHandler.SHAPES,
 
   data: function () {
@@ -28,27 +28,27 @@ Vue.component('mermaid-preview', {
       selectedNodeId:    null,
       selectedEdgeIndex: null,
 
-      // Node inline edit
+      // 노드 인라인 편집
       editingNodeId:  null,
       editingText:    '',
       editInputStyle: {},
 
-      // Edge inline edit
+      // 엣지 인라인 편집
       editingEdgeIndex:    null,
       editingEdgeText:     '',
       edgeEditInputStyle:  {},
 
-      // Context menus
+      // 컨텍스트 UI 상태
       contextMenu:  null,   // { nodeId, x, y }
-      edgeToolbar:  null,   // { edgeIndex, x, y }  — floating edge action bar
+      edgeToolbar:  null,   // { edgeIndex, x, y } - 플로팅 엣지 액션 바
 
-      // Port drag state
+      // 포트 드래그 상태
       portDragging:  false,
       hoveredNodeId: null,
 
       viewportZoom: 1,
 
-      // Internal SVG state (not reactive on purpose — rebuilt each render)
+      // SVG 내부 좌표/뷰포트 상태
       _positions: {},
       _elements:  {},
       _edgePaths: [],
@@ -71,15 +71,15 @@ Vue.component('mermaid-preview', {
     this.renderDiagram();
     var self = this;
 
-    // Global click: close context menus / edge toolbar
+    // 전역 클릭 시 컨텍스트 메뉴와 엣지 툴바 닫기
     document.addEventListener('click', function () {
       self.contextMenu = null;
       self.edgeToolbar = null;
     });
 
-    // Global keydown: Delete, Escape, Ctrl+Z/Y
+    // 전역 키 입력: Delete, Escape, Ctrl+Z/Y
     document.addEventListener('keydown', function (e) {
-      // Don't intercept when an input is focused
+      // input / textarea 포커스 중에는 가로채지 않는다.
       if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
 
       if (e.key === 'Delete' || e.key === 'Backspace') {
@@ -124,7 +124,7 @@ Vue.component('mermaid-preview', {
 
   methods: {
 
-    // ── Rendering ────────────────────────────────────────────────
+    // ── 렌더링 ───────────────────────────────────────────────────
 
     renderDiagram: function () {
       var m = this.model;
@@ -163,7 +163,7 @@ Vue.component('mermaid-preview', {
       }
     },
 
-    // ── Post-render wiring ────────────────────────────────────────
+    // ── 렌더 후 인터랙션 연결 ────────────────────────────────────
 
     postRenderSetup: function () {
       var canvas = this.$refs.canvas;
@@ -172,28 +172,29 @@ Vue.component('mermaid-preview', {
       if (!svgEl) return;
       this._svgEl = svgEl;
 
+      // overlay와 interaction이 모두 같은 좌표계를 쓰도록 viewBox를 먼저 맞춘다.
       this._setupViewport(svgEl, canvas);
 
-      // Extract positions and elements
+      // 노드 위치와 SVG 요소 수집
       var collected    = SvgPositionTracker.collectNodePositions(svgEl);
       this._positions  = collected.positions;
       this._elements   = collected.elements;
       this._edgePaths  = SvgPositionTracker.collectEdgePaths(svgEl, this.model.edges);
 
-      // Build ctx bridge
+      // 하위 핸들러에 넘길 bridge 객체 구성
       var ctx = this._buildCtx(svgEl);
 
-      // Edge ghost overlay FIRST (root-level, not blocked by Mermaid's pointer-events)
+      // 엣지 ghost overlay를 먼저 구성
       SvgEdgeHandler.initGhostOverlay(svgEl);
       SvgEdgeHandler.attach(svgEl, this._edgePaths, this._positions, ctx);
 
-      // Port overlay on top of edge ghosts
+      // 포트 overlay는 ghost보다 위에 올라온다.
       PortDragHandler.initOverlay(svgEl);
 
-      // Node handlers
+      // 노드 인터랙션 연결
       SvgNodeHandler.attach(svgEl, this._positions, this._elements, ctx);
 
-      // Canvas background click → deselect
+      // 배경 클릭 시 선택 해제
       var self = this;
       svgEl.addEventListener('click', function (e) {
         if (e.target === svgEl ||
@@ -203,7 +204,7 @@ Vue.component('mermaid-preview', {
         }
       });
 
-      // Canvas double-click on background → add node
+      // 배경 더블클릭 시 노드 추가
       svgEl.addEventListener('dblclick', function (e) {
         var t = e.target;
         var isBackground = t === svgEl ||
@@ -216,6 +217,7 @@ Vue.component('mermaid-preview', {
     },
 
     _setupViewport: function (svgEl, canvas) {
+      // 재렌더 후에도 기존 줌/팬 상태를 최대한 복원하기 위해 이전 viewBox를 보관한다.
       var prevBase = this._baseViewBox ? Object.assign({}, this._baseViewBox) : null;
       var prevCurrent = this._currentViewBox ? Object.assign({}, this._currentViewBox) : null;
       var vb = svgEl.getAttribute('viewBox');
@@ -252,6 +254,7 @@ Vue.component('mermaid-preview', {
         self._zoomAtClient(e.deltaY < 0 ? 0.9 : 1.1, e.clientX, e.clientY);
       };
 
+      // 팬은 배경에서만 시작해서 node/edge interaction과 충돌하지 않게 한다.
       canvas.onmousedown = function (e) {
         if (e.button !== 0) return;
         if (!self._canStartPan(e.target, svgEl)) return;
@@ -313,6 +316,7 @@ Vue.component('mermaid-preview', {
     _restoreViewport: function (prevBase, prevCurrent) {
       if (!prevBase || !prevCurrent || !this._baseViewBox) return;
 
+      // 이전 "줌 비율 + 중심점 비율"을 새 base bounds에 투영해서 시점을 유지한다.
       var zoomScale = prevCurrent.width / prevBase.width;
       var centerXRatio = (prevCurrent.x + prevCurrent.width / 2 - prevBase.x) / prevBase.width;
       var centerYRatio = (prevCurrent.y + prevCurrent.height / 2 - prevBase.y) / prevBase.height;
@@ -419,7 +423,7 @@ Vue.component('mermaid-preview', {
       return ctx;
     },
 
-    // ── Node edit (confirm/cancel live in component — uses $emit) ─
+    // ── 노드 편집 ────────────────────────────────────────────────
 
     confirmNodeEdit: function () {
       if (this.editingNodeId && this.editingText.trim()) {
@@ -442,7 +446,7 @@ Vue.component('mermaid-preview', {
       if (e.key === 'Escape') { this.cancelNodeEdit(); }
     },
 
-    // ── Edge edit ─────────────────────────────────────────────────
+    // ── 엣지 편집 ────────────────────────────────────────────────
 
     confirmEdgeEdit: function () {
       if (this.editingEdgeIndex !== null) {
@@ -465,7 +469,7 @@ Vue.component('mermaid-preview', {
       if (e.key === 'Escape') { this.cancelEdgeEdit(); }
     },
 
-    // ── Node context menu actions ─────────────────────────────────
+    // ── 노드 컨텍스트 메뉴 액션 ─────────────────────────────────
 
     contextEditNode: function () {
       if (!this.contextMenu) return;
@@ -488,7 +492,7 @@ Vue.component('mermaid-preview', {
       this.contextMenu = null;
     },
 
-    // ── Edge toolbar actions ──────────────────────────────────────
+    // ── 엣지 툴바 액션 ───────────────────────────────────────────
 
     edgeToolbarEdit: function () {
       if (!this.edgeToolbar) return;
@@ -508,7 +512,7 @@ Vue.component('mermaid-preview', {
       this.selectedEdgeIndex = null;
     },
 
-    // Lightweight ctx for use outside postRenderSetup (no svgEl needed)
+    // postRenderSetup 바깥에서도 쓸 수 있는 경량 ctx
     _buildCtxLite: function () {
       var self = this;
       return {
@@ -546,8 +550,9 @@ Vue.component('mermaid-preview', {
       var rect = this._svgEl.getBoundingClientRect();
       var canvasAspect = rect.width && rect.height ? rect.width / rect.height : 1;
       var box = this._baseViewBox;
-      var padX = Math.max(80, box.width * 0.14);
-      var padY = Math.max(80, box.height * 0.18);
+      // fit은 꽉 채우기보다 "전체가 잘리지 않게 여유 있게 보이기"에 맞춘다.
+      var padX = Math.max(120, box.width * 0.22);
+      var padY = Math.max(120, box.height * 0.28);
       var width = box.width + padX * 2;
       var height = box.height + padY * 2;
       var x = box.x - padX;

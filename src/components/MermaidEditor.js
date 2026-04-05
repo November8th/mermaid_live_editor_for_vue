@@ -1,6 +1,6 @@
 /**
- * MermaidEditor Component
- * Left panel: Mermaid script textarea with status bar.
+ * MermaidEditor 컴포넌트
+ * 왼쪽 패널의 Mermaid 스크립트 textarea와 상태 바를 담당한다.
  */
 
 Vue.component('mermaid-editor', {
@@ -16,6 +16,7 @@ Vue.component('mermaid-editor', {
   },
   watch: {
     value: function (newVal) {
+      // 외부(model -> script) 갱신이 들어오면 textarea 로컬 상태도 따라간다.
       if (newVal !== this.localValue) {
         this.localValue = newVal;
       }
@@ -33,13 +34,14 @@ Vue.component('mermaid-editor', {
     onInput: function (e) {
       this.localValue = e.target.value;
       var self = this;
+      // 매 타이핑마다 바로 parse하지 않고 짧게 debounce해서 editor 입력감을 유지한다.
       clearTimeout(this.debounceTimer);
       this.debounceTimer = setTimeout(function () {
         self.$emit('input', self.localValue);
       }, 300);
     },
     onKeyDown: function (e) {
-      // Tab key support
+      // Tab 키 입력 시 실제 공백 4칸을 넣는다.
       if (e.key === 'Tab') {
         e.preventDefault();
         var textarea = e.target;
