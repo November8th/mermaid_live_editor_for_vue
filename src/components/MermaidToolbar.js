@@ -29,35 +29,24 @@ Vue.component('mermaid-toolbar', {
   },
   template: '\
     <div class="toolbar">\
-      <!-- 좌측은 구조 편집, 우측은 뷰포트 조작 성격으로 묶는다. -->\
       <div class="toolbar__group">\
-        <button v-if="isFlowchart" class="toolbar__btn" @click="addNode" title="Add Node (or double-click canvas)">\
-          <span class="toolbar__btn-icon">＋</span> Node\
+        <button v-if="isFlowchart" class="toolbar__btn toolbar__btn--active" @click="addNode" title="Add Node (or double-click canvas)">\
+          <span class="toolbar__btn-icon">+</span> Add Node\
         </button>\
-        <button v-else class="toolbar__btn" @click="addSequenceParticipant" title="Add participant">\
-          <span class="toolbar__btn-icon">＋</span> Participant\
+        <button v-else class="toolbar__btn toolbar__btn--active" @click="addSequenceParticipant" title="Add participant">\
+          <span class="toolbar__btn-icon">+</span> Participant\
         </button>\
         <button v-if="!isFlowchart" class="toolbar__btn" @click="addSequenceMessage" title="Add message">\
           <span class="toolbar__btn-icon">↔</span> Message\
         </button>\
       </div>\
-      <div v-if="isFlowchart" class="toolbar__separator"></div>\
+      <div class="toolbar__separator"></div>\
       <div class="toolbar__group">\
-        <button\
-          class="toolbar__btn"\
-          @click="undo"\
-          :disabled="!canUndo"\
-          title="Undo (Ctrl+Z)"\
-        >\
-          ← Undo\
+        <button class="toolbar__btn" @click="undo" :disabled="!canUndo" title="Undo (Ctrl+Z)">\
+          ↩ Undo\
         </button>\
-        <button\
-          class="toolbar__btn"\
-          @click="redo"\
-          :disabled="!canRedo"\
-          title="Redo (Ctrl+Y)"\
-        >\
-          Redo →\
+        <button class="toolbar__btn" @click="redo" :disabled="!canRedo" title="Redo (Ctrl+Y)">\
+          ↪ Redo\
         </button>\
       </div>\
       <div v-if="isFlowchart" class="toolbar__separator"></div>\
@@ -71,17 +60,13 @@ Vue.component('mermaid-toolbar', {
       </div>\
       <div class="toolbar__separator"></div>\
       <div class="toolbar__group">\
-        <button class="toolbar__btn" @click="zoomOut" title="Zoom Out">\
-          <span class="toolbar__btn-icon">－</span>\
-        </button>\
-        <button class="toolbar__btn" @click="zoomIn" title="Zoom In">\
-          <span class="toolbar__btn-icon">＋</span>\
-        </button>\
+        <button class="toolbar__btn" @click="zoomOut" title="Zoom Out">−</button>\
+        <button class="toolbar__btn" @click="zoomIn" title="Zoom In">+</button>\
         <button class="toolbar__btn" @click="fitView" title="Fit to View">\
-          <span class="toolbar__btn-icon">⊞</span> 전체 맞춤\
+          ⊞ Fit View\
         </button>\
         <button class="toolbar__btn" @click="copySvg" title="Copy SVG to clipboard">\
-          <span class="toolbar__btn-icon">⊡</span> SVG\
+          ⊡ Copy SVG\
         </button>\
       </div>\
     </div>\

@@ -10,7 +10,7 @@
   if (window.mermaid) {
     window.mermaid.initialize({
       startOnLoad: false,
-      theme: 'dark',
+      theme: 'base',
       securityLevel: 'loose',
       flowchart: {
         htmlLabels: true,
@@ -27,21 +27,21 @@
         messageMargin: 48
       },
       themeVariables: {
-        darkMode: true,
-        background: '#1c1f2e',
-        primaryColor: '#6366f1',
-        primaryTextColor: '#e4e6f0',
-        primaryBorderColor: '#818cf8',
-        secondaryColor: '#232738',
-        tertiaryColor: '#2a2f45',
-        lineColor: '#818cf8',
-        textColor: '#e4e6f0',
-        mainBkg: '#232738',
-        nodeBorder: '#818cf8',
-        clusterBkg: '#1c1f2e',
-        clusterBorder: '#5c6380',
-        titleColor: '#e4e6f0',
-        edgeLabelBackground: '#232738',
+        darkMode: false,
+        background: '#ffffff',
+        primaryColor: '#e8edf8',
+        primaryTextColor: '#1b2a4a',
+        primaryBorderColor: '#b0bdd6',
+        secondaryColor: '#f0f3fb',
+        tertiaryColor: '#f4f6fb',
+        lineColor: '#5c7ab0',
+        textColor: '#1b2a4a',
+        mainBkg: '#e8edf8',
+        nodeBorder: '#b0bdd6',
+        clusterBkg: '#f4f6fb',
+        clusterBorder: '#c5cedf',
+        titleColor: '#1b2a4a',
+        edgeLabelBackground: '#ffffff',
         fontFamily: 'Inter, sans-serif',
         fontSize: '14px'
       }

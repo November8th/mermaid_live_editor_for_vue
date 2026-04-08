@@ -517,9 +517,16 @@ Vue.component('mermaid-live-editor', {
   template: '\
     <div style="display: flex; flex-direction: column; flex: 1; overflow: hidden;">\
       <div class="app-header">\
-        <div class="app-header__logo">\
-          <div class="app-header__icon">◈</div>\
-          <span class="app-header__title">Mermaid Live Editor</span>\
+        <div class="app-header__left">\
+          <div class="app-header__logo">\
+            <div class="app-header__icon">S/</div>\
+            <span class="app-header__title">SureFlow Editor</span>\
+          </div>\
+          <nav class="app-header__nav">\
+            <span class="app-header__nav-item app-header__nav-item--active">Diagram</span>\
+          </nav>\
+        </div>\
+        <div class="app-header__right">\
           <span class="app-header__badge">Vue 2</span>\
         </div>\
       </div>\
