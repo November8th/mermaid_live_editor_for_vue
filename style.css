@@ -551,13 +551,6 @@ body {
   cursor: grabbing;
 }
 
-.preview-area__canvas .edgePath {
-  cursor: pointer;
-}
-
-.preview-area__canvas .edgePath:hover path {
-  stroke-width: 3px !important;
-}
 
 /* ============================================
    노드 인라인 편집
@@ -877,7 +870,7 @@ body {
   pointer-events: all !important;
 }
 
-.preview-area__canvas .edgePath path.edge-click-area {
+.preview-area__canvas .edgePaths > path.edge-click-area {
   pointer-events: stroke !important;
   stroke-width: 16px !important;
   stroke: transparent !important;
