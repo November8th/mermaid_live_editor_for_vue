@@ -436,13 +436,6 @@ body {
   cursor: grabbing;
 }
 
-.preview-area__canvas .edgePath {
-  cursor: pointer;
-}
-
-.preview-area__canvas .edgePath:hover path {
-  stroke-width: 3px !important;
-}
 
 /* ---- 노드 인라인 편집 ---- */
 .node-edit-overlay {
@@ -702,31 +695,29 @@ body {
   filter: brightness(1.2) drop-shadow(0 0 16px var(--accent-glow));
 }
 
-.preview-area__canvas .edgePath path {
-  transition: all 0.2s ease;
-}
-
-.preview-area__canvas .edgePath path.edge-hovered {
-  filter: drop-shadow(0 0 8px rgba(79, 70, 229, 0.7));
-  stroke: #4338ca !important;
-  stroke-width: 3.5px !important;
-}
-
-/* --- Mermaid 기본 blocker 오버라이드 --- */
-.preview-area__canvas .edgePaths,
-.preview-area__canvas .edgePath {
+/* (Removed legacy .edgePath rules - Mermaid v11 uses flat .edgePaths > path structure) */
+/* --- OVERRIDE MERMAID DEFAULT BLOCKERS (Mermaid v11) --- */
+.preview-area__canvas .edgePaths {
   pointer-events: all !important;
 }
 
-.preview-area__canvas .edgePath path.edge-click-area {
+.preview-area__canvas .edgePaths > path.edge-click-area {
   pointer-events: stroke !important;
   stroke-width: 16px !important;
   stroke: transparent !important;
   fill: none !important;
 }
 
-.preview-area__canvas .edgePath path:not(.edge-click-area) {
-  pointer-events: none !important; /* 클릭이 두꺼운 ghost path로 통과되게 한다. */
+.preview-area__canvas .edgePaths > path:not(.edge-click-area) {
+  pointer-events: stroke !important;
+  cursor: pointer !important;
+  transition: all 0.2s ease;
+}
+
+.preview-area__canvas .edgePaths > path.edge-hovered {
+  filter: drop-shadow(0 0 4px var(--accent-primary));
+  stroke: var(--accent-primary) !important;
+  stroke-width: 2.5px !important;
 }
 
 .preview-area__canvas .edgeLabels {
