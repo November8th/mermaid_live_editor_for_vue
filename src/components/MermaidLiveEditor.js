@@ -196,10 +196,18 @@ Vue.component('mermaid-live-editor', {
     addNode: function (shape) {
       if (!this.isFlowchart) return;
       this._snapshot();
-      if (!shape) shape = 'rect';
+      var nodeShape = shape;
+      var nodeText = 'Node';
+
+      if (shape && typeof shape === 'object') {
+        nodeShape = shape.shape;
+        nodeText = shape.text || nodeText;
+      }
+
+      if (!nodeShape) nodeShape = 'rect';
       this.nodeCounter++;
       var newId   = 'N' + this.nodeCounter;
-      var newNode = { id: newId, text: 'Node', shape: shape };
+      var newNode = { id: newId, text: nodeText, shape: nodeShape };
       var nodes   = this.model.nodes.slice();
       nodes.push(newNode);
       this.model = Object.assign({}, this.model, { nodes: nodes });

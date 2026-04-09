@@ -4,11 +4,18 @@
  */
 
 Vue.component('mermaid-toolbar', {
+  SHAPES: SvgNodeHandler.SHAPES,
   props: {
     diagramType: { type: String,  default: 'flowchart' },
     direction: { type: String,  default: 'TD' },
     canUndo:   { type: Boolean, default: false },
     canRedo:   { type: Boolean, default: false }
+  },
+  data: function () {
+    return {
+      showShapePicker: false,
+      pendingNodeText: 'Node'
+    };
   },
   computed: {
     isFlowchart: function () {
@@ -19,7 +26,17 @@ Vue.component('mermaid-toolbar', {
     }
   },
   methods: {
-    addNode: function () { this.$emit('add-node'); },
+    toggleShapePicker: function () {
+      this.showShapePicker = !this.showShapePicker;
+      if (this.showShapePicker) this.pendingNodeText = 'Node';
+    },
+    addNode: function (shape) {
+      this.showShapePicker = false;
+      this.$emit('add-node', {
+        shape: shape,
+        text: (this.pendingNodeText || '').trim() || 'Node'
+      });
+    },
     addSequenceParticipant: function () { this.$emit('add-sequence-participant'); },
     addSequenceMessage: function () { this.$emit('add-sequence-message'); },
     undo: function () { this.$emit('undo'); },
@@ -28,7 +45,18 @@ Vue.component('mermaid-toolbar', {
     zoomOut: function () { this.$emit('zoom-out'); },
     zoomIn: function () { this.$emit('zoom-in'); },
     fitView: function () { this.$emit('fit-view'); },
-    copySvg: function () { this.$emit('copy-svg'); }
+    copySvg: function () { this.$emit('copy-svg'); },
+    _handleDocumentClick: function (e) {
+      if (!this.showShapePicker) return;
+      if (this.$el && this.$el.contains(e.target)) return;
+      this.showShapePicker = false;
+    }
+  },
+  mounted: function () {
+    document.addEventListener('mousedown', this._handleDocumentClick, true);
+  },
+  beforeDestroy: function () {
+    document.removeEventListener('mousedown', this._handleDocumentClick, true);
   },
   template: '\
     <div class="toolbar">\
@@ -40,9 +68,34 @@ Vue.component('mermaid-toolbar', {
       </div>\
       <div class="toolbar__sub">\
         <div class="toolbar__group">\
-          <button v-if="isFlowchart" class="toolbar__btn toolbar__btn--active" @click="addNode" title="Add Node (or double-click canvas)">\
-            <span class="toolbar__btn-icon">+</span> Add Node\
-          </button>\
+          <div v-if="isFlowchart" class="toolbar__add-node-wrap">\
+            <button class="toolbar__btn toolbar__btn--active" @click="toggleShapePicker" title="Add Node">\
+              <span class="toolbar__btn-icon">+</span> Add Node\
+            </button>\
+            <div v-if="showShapePicker" class="toolbar__shape-picker" @click.stop>\
+              <div class="toolbar__shape-picker-title">Select Shape</div>\
+              <input\
+                class="toolbar__shape-input"\
+                v-model="pendingNodeText"\
+                type="text"\
+                maxlength="100"\
+                placeholder="Node name"\
+                @keydown.enter.prevent="addNode(\'rect\')"\
+              />\
+              <div class="toolbar__shape-picker-grid">\
+                <button\
+                  v-for="s in $options.SHAPES"\
+                  :key="s.key"\
+                  class="toolbar__shape-picker-btn"\
+                  :title="s.name"\
+                  @click="addNode(s.key)"\
+                >\
+                  <span class="context-menu__shape-icon" :class="\'context-menu__shape-icon--\' + s.key"></span>\
+                  <span class="context-menu__shape-text">{{ s.name }}</span>\
+                </button>\
+              </div>\
+            </div>\
+          </div>\
           <button v-else class="toolbar__btn toolbar__btn--active" @click="addSequenceParticipant" title="Add participant">\
             <span class="toolbar__btn-icon">+</span> Participant\
           </button>\
@@ -62,10 +115,10 @@ Vue.component('mermaid-toolbar', {
         </div>\
         <div v-if="isFlowchart" class="toolbar__group">\
           <select class="toolbar__select" :value="direction" @change="changeDirection" title="Layout direction">\
-            <option value="TD">Top Down</option>\
-            <option value="LR">Left Right</option>\
-            <option value="BT">Bottom Top</option>\
-            <option value="RL">Right Left</option>\
+            <option value="TD">↓ Top Down</option>\
+            <option value="LR">→ Left Right</option>\
+            <option value="BT">↑ Bottom Top</option>\
+            <option value="RL">← Right Left</option>\
           </select>\
         </div>\
       </div>\

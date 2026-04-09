@@ -297,6 +297,10 @@ Vue.component('mermaid-preview', {
 
         // 노드 인터랙션 연결
         SvgNodeHandler.attach(svgEl, this._positions, this._elements, ctx);
+
+        if (this._pendingContextMenuNodeId) {
+          this._openContextMenuForNode(this._pendingContextMenuNodeId);
+        }
       } else {
         this._positions = {};
         this._elements = {};
@@ -320,6 +324,26 @@ Vue.component('mermaid-preview', {
 
     scheduleFit: function () {
       this._fitAfterRender = true;
+    },
+
+    openContextMenuForNode: function (nodeId) {
+      this._pendingContextMenuNodeId = nodeId;
+      this._openContextMenuForNode(nodeId);
+    },
+
+    _openContextMenuForNode: function (nodeId) {
+      var nodeEl = this._elements && this._elements[nodeId];
+      if (!nodeEl) return;
+
+      var rect = nodeEl.getBoundingClientRect();
+      this.selectedNodeId = nodeId;
+      this.selectedEdgeIndex = null;
+      this.contextMenu = {
+        nodeId: nodeId,
+        x: Math.round(rect.left + rect.width / 2),
+        y: Math.round(rect.top + Math.max(18, rect.height * 0.35))
+      };
+      this._pendingContextMenuNodeId = null;
     },
 
     _applyTransform: function () {
