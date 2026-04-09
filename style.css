@@ -678,6 +678,11 @@ mermaid-toolbar {
   transition: box-shadow var(--transition-normal);
 }
 
+.preview-area__svg-host {
+  position: absolute;
+  inset: 0;
+}
+
 .preview-area__canvas:hover {
   box-shadow: var(--shadow-lg);
 }
@@ -752,14 +757,20 @@ mermaid-toolbar {
    노드 인라인 편집
    ============================================ */
 .node-edit-overlay {
-  position: fixed;
+  position: absolute;
   z-index: 1000;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: none;
+  overflow: visible;
+  background: transparent;
 }
 
 .node-edit-input {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
   background: var(--bg-surface);
   color: var(--text-primary);
   border: 2px solid var(--accent-blue);
@@ -803,7 +814,7 @@ mermaid-toolbar {
    컨텍스트 메뉴
    ============================================ */
 .context-menu {
-  position: fixed;
+  position: absolute;
   z-index: 2000;
   background: var(--bg-surface);
   border: 1px solid var(--border-light);
@@ -1262,9 +1273,18 @@ mermaid-toolbar {
 }
 
 .preview-area__canvas .edgePath path.edge-hovered {
-  filter: drop-shadow(0 0 6px rgba(21, 101, 192, 0.6));
-  stroke: #1565c0 !important;
-  stroke-width: 3px !important;
+  filter: drop-shadow(0 0 8px rgba(21, 101, 192, 0.28));
+}
+
+.preview-area__canvas .edgePath.edge-hovered path,
+.preview-area__canvas .edgePath.edge-hovered .path,
+.preview-area__canvas .edgePath.edge-selected path,
+.preview-area__canvas .edgePath.edge-selected .path {
+  filter: drop-shadow(0 0 8px rgba(21, 101, 192, 0.28));
+}
+
+.preview-area__canvas .edgePath path.edge-selected {
+  filter: drop-shadow(0 0 8px rgba(21, 101, 192, 0.28));
 }
 
 /* Mermaid 기본 pointer-events 오버라이드 */
@@ -1277,6 +1297,15 @@ mermaid-toolbar {
   pointer-events: stroke !important;
   stroke-width: 16px !important;
   stroke: transparent !important;
+  fill: none !important;
+}
+
+.preview-area__canvas #edge-ghost-overlay .edge-hit-selected {
+  stroke: #2563eb !important;
+  stroke-opacity: 0.18 !important;
+  stroke-width: 16px !important;
+  stroke-linecap: round !important;
+  stroke-linejoin: round !important;
   fill: none !important;
 }
 
@@ -1296,7 +1325,7 @@ mermaid-toolbar {
    엣지 플로팅 툴바
    ============================================ */
 .edge-toolbar {
-  position: fixed;
+  position: absolute;
   transform: translate(-50%, calc(-100% - 10px));
   display: flex;
   align-items: center;
@@ -1309,6 +1338,7 @@ mermaid-toolbar {
   z-index: 500;
   animation: fadeScaleIn var(--transition-fast) both;
   pointer-events: all;
+  max-width: calc(100% - 16px);
 }
 
 .edge-toolbar__btn {

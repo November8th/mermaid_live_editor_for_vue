@@ -37,16 +37,19 @@
       var pathEl = edgeData.path;
       if (!pathEl) return;
       var idx = edgeData.index;
+      var edgeEl = edgeData.el || pathEl;
 
       var ghost = SvgEdgeHandler._makeGhost(pathEl, svgEl, overlay);
       // 보조 클릭 영역 생성에 실패해도 최소한 실제 선에는 직접 바인딩해서
       // 엣지 상호작용이 완전히 죽지 않게 한다.
       if (!ghost) {
-        SvgEdgeHandler._bindEdgeEvents(pathEl, pathEl, idx, ctx);
+        edgeData.hit = pathEl;
+        SvgEdgeHandler._bindEdgeEvents(pathEl, pathEl, edgeEl, idx, ctx);
         return;
       }
 
-      SvgEdgeHandler._bindEdgeEvents(ghost, pathEl, idx, ctx);
+      edgeData.hit = ghost;
+      SvgEdgeHandler._bindEdgeEvents(ghost, pathEl, edgeEl, idx, ctx);
     },
 
     // 1차 시도: 선을 여러 점으로 샘플링해서 루트 좌표계 polyline 보조선을 생성
@@ -121,26 +124,37 @@
       el.style.pointerEvents = 'stroke';
     },
 
-    _bindEdgeEvents: function (hitEl, pathEl, idx, ctx) {
+    _bindEdgeEvents: function (hitEl, pathEl, edgeEl, idx, ctx) {
+      ctx.watchEdgeSelection(idx, edgeEl);
       // hover 표현은 보조선보다 실제 선(pathEl)에 주는 쪽이 시각적으로 더 자연스럽다.
       hitEl.addEventListener('mouseenter', function () {
-        pathEl.classList.add('edge-hovered');
+        edgeEl.classList.add('edge-hovered');
         hitEl.setAttribute('stroke-opacity', '0.08');
         hitEl.setAttribute('stroke', '#4f46e5');
       });
       hitEl.addEventListener('mouseleave', function () {
-        pathEl.classList.remove('edge-hovered');
+        var selectedEdgeIndex = ctx.getState().selectedEdgeIndex;
+        if (selectedEdgeIndex !== idx) {
+          edgeEl.classList.remove('edge-hovered');
+        }
         hitEl.setAttribute('stroke', '#000');
         hitEl.setAttribute('stroke-opacity', '0.003');
       });
       hitEl.addEventListener('click', function (e) {
         e.preventDefault();
         e.stopPropagation();
+        var rect = pathEl.getBoundingClientRect();
+        var previewRect = ctx.getPreviewRect ? ctx.getPreviewRect() : null;
         ctx.setState({
           selectedEdgeIndex: idx,
           selectedNodeId:    null,
           contextMenu:       null,
-          edgeToolbar:       { x: e.clientX, y: e.clientY, edgeIndex: idx }
+          edgeToolbar:       {
+            x: Math.round((previewRect ? rect.left - previewRect.left : rect.left) + rect.width / 2),
+            y: Math.round((previewRect ? rect.top - previewRect.top : rect.top) - 8),
+            edgeIndex: idx,
+            anchorType: 'edge'
+          }
         });
         ctx.emit('edge-selected', idx);
       });
@@ -164,11 +178,18 @@
         e.preventDefault(); e.stopPropagation();
         var idx = findIdx();
         if (idx === -1) return;
+        var rect = labelEl.getBoundingClientRect();
+        var previewRect = ctx.getPreviewRect ? ctx.getPreviewRect() : null;
         ctx.setState({
           selectedEdgeIndex: idx,
           selectedNodeId:    null,
           contextMenu:       null,
-          edgeToolbar:       { x: e.clientX, y: e.clientY, edgeIndex: idx }
+          edgeToolbar:       {
+            x: Math.round((previewRect ? rect.left - previewRect.left : rect.left) + rect.width / 2),
+            y: Math.round((previewRect ? rect.top - previewRect.top : rect.top) - 8),
+            edgeIndex: idx,
+            anchorType: 'edge'
+          }
         });
         ctx.emit('edge-selected', idx);
       });
@@ -187,6 +208,11 @@
 
       var x = clientX - 70;
       var y = clientY - 24;
+      var previewRect = ctx.getPreviewRect ? ctx.getPreviewRect() : null;
+      if (previewRect) {
+        x = clientX - previewRect.left - 70;
+        y = clientY - previewRect.top - 24;
+      }
 
       if (svgEl && positions) {
         var fp = positions[edge.from];
@@ -196,18 +222,20 @@
           // 클릭 지점과 무관하게 일관된 위치에서 편집되게 한다.
           var screenPt = SvgPositionTracker.svgToScreen(svgEl,
             (fp.cx + tp.cx) / 2, (fp.cy + tp.cy) / 2);
-          x = screenPt.x - 70;
-          y = screenPt.y - 24;
+          x = (previewRect ? screenPt.x - previewRect.left : screenPt.x) - 70;
+          y = (previewRect ? screenPt.y - previewRect.top : screenPt.y) - 24;
         }
       }
 
       ctx.setState({
+        selectedEdgeIndex:   index,
+        selectedNodeId:      null,
         edgeToolbar:         null,
         editingEdgeIndex:    index,
         editingEdgeText:     edge.text || '',
         editingEdgeColor:    edge.color || '#5c7ab0',
         edgeEditInputStyle: {
-          position: 'fixed',
+          position: 'absolute',
           left:  x + 'px',
           top:   y + 'px',
           zIndex: 1000,

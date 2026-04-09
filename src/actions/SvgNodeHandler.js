@@ -71,11 +71,18 @@
         if (e.button !== 0) return;
         e.preventDefault();
         e.stopPropagation();
+        var rect = nodeEl.getBoundingClientRect();
+        var previewRect = ctx.getPreviewRect ? ctx.getPreviewRect() : null;
         ctx.setState({
           selectedNodeId:    nodeId,
           selectedEdgeIndex: null,
           edgeToolbar:   null,
-          contextMenu:   { nodeId: nodeId, x: e.clientX, y: e.clientY }
+          contextMenu:   {
+            nodeId: nodeId,
+            anchorType: 'node',
+            x: Math.round((previewRect ? rect.left - previewRect.left : rect.left) + rect.width + 10),
+            y: Math.round((previewRect ? rect.top - previewRect.top : rect.top) + Math.min(24, rect.height * 0.5))
+          }
         });
         ctx.emit('node-selected', nodeId);
       });
@@ -92,8 +99,15 @@
       nodeEl.addEventListener('contextmenu', function (e) {
         e.preventDefault();
         e.stopPropagation();
+        var rect = nodeEl.getBoundingClientRect();
+        var previewRect = ctx.getPreviewRect ? ctx.getPreviewRect() : null;
         ctx.setState({
-          contextMenu: { nodeId: nodeId, x: e.clientX, y: e.clientY },
+          contextMenu: {
+            nodeId: nodeId,
+            anchorType: 'node',
+            x: Math.round((previewRect ? rect.left - previewRect.left : rect.left) + rect.width + 10),
+            y: Math.round((previewRect ? rect.top - previewRect.top : rect.top) + Math.min(24, rect.height * 0.5))
+          },
           edgeToolbar: null
         });
       });
@@ -107,14 +121,17 @@
       if (!node) return;
 
       var rect = nodeEl.getBoundingClientRect();
+      var previewRect = ctx.getPreviewRect ? ctx.getPreviewRect() : null;
+      var localLeft = previewRect ? rect.left - previewRect.left : rect.left;
+      var localTop = previewRect ? rect.top - previewRect.top : rect.top;
       ctx.setState({
         editingNodeId:  nodeId,
         editingText:    node.text || node.id,
         editingNodeColor: node.fill || '#e2e8f0',
         editInputStyle: {
-          position: 'fixed',
-          left:  (rect.left + rect.width  / 2 - 70) + 'px',
-          top:   (rect.top  + rect.height / 2 - 16) + 'px',
+          position: 'absolute',
+          left:  (localLeft + rect.width  / 2 - 70) + 'px',
+          top:   (localTop  + rect.height / 2 - 16) + 'px',
           zIndex: 1000,
           width: Math.max(140, rect.width + 24) + 'px'
         }

@@ -1,9 +1,9 @@
-/**
+﻿/**
  * MermaidPreview 컴포넌트
- * - SvgPositionTracker : 좌표 추출
- * - PortDragHandler    : 4방향 포트와 drag-to-connect
+ * - SvgPositionTracker : 좌표 수집
+ * - PortDragHandler    : 4방향 포트 drag-to-connect
  * - SvgNodeHandler     : 노드 클릭 / 더블클릭 / 우클릭 / hover
- * - SvgEdgeHandler     : 엣지 클릭 / 레이블 / 편집
+ * - SvgEdgeHandler     : 엣지 클릭 / 라벨 / 편집
  */
 
 Vue.component('mermaid-preview', {
@@ -61,14 +61,14 @@ Vue.component('mermaid-preview', {
 
       // 컨텍스트 UI 상태
       contextMenu:  null,   // { nodeId, x, y }
-      edgeToolbar:  null,   // { edgeIndex, x, y } - 플로팅 엣지 액션 바
+      edgeToolbar:  null,   // { edgeIndex, x, y } - 플로우차트 엣지 액션 바
       sequenceToolbar: null, // { type, id|index, x, y }
 
       // 포트 드래그 상태
       portDragging:  false,
       hoveredNodeId: null,
 
-      // CSS transform 줌/팬 상태
+      // CSS transform 줌/패닝 상태
       cfgZoom: 1.0,
       panX: 0,
       panY: 0,
@@ -88,6 +88,9 @@ Vue.component('mermaid-preview', {
     model: {
       handler: function () { this.renderDiagram(); },
       deep: true
+    },
+    selectedEdgeIndex: function () {
+      this._syncSelectedEdgeVisuals();
     }
   },
 
@@ -106,9 +109,14 @@ Vue.component('mermaid-preview', {
 
     // 전역 클릭 시 컨텍스트 메뉴와 엣지 툴바 닫기
     document.addEventListener('click', function () {
+      var hadEdgeToolbar = !!self.edgeToolbar;
       self.contextMenu = null;
       self.edgeToolbar = null;
       self.sequenceToolbar = null;
+      if (hadEdgeToolbar && self.editingEdgeIndex === null) {
+        self.selectedEdgeIndex = null;
+        self._clearEdgeVisualState();
+      }
     });
 
     this._pointerDownCommitHandler = function (e) {
@@ -128,7 +136,7 @@ Vue.component('mermaid-preview', {
 
     // 전역 키 입력: Delete, Escape, Ctrl+Z/Y
     document.addEventListener('keydown', function (e) {
-      // input / textarea 포커스 중에는 가로채지 않는다.
+      // input / textarea 사용 중에는 전역 단축키를 막는다.
       if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
 
       if (e.key === 'Delete' || e.key === 'Backspace') {
@@ -209,7 +217,7 @@ Vue.component('mermaid-preview', {
       if (this.editingSequenceMessageIndex !== null) this.confirmSequenceMessageEdit();
     },
 
-    // ── 렌더링 ───────────────────────────────────────────────────
+    // 공통 렌더 유틸
 
     _hasRenderableContent: function (model) {
       if (!model) return false;
@@ -253,7 +261,7 @@ Vue.component('mermaid-preview', {
 
       try {
         window.mermaid.render(containerId, script).then(function (result) {
-          // 더 최신 render 요청이 이미 있으면 늦게 도착한 이전 결과는 버린다.
+          // 가장 최신 render 요청만 반영하고 이전 결과는 버린다.
           if (renderToken !== self.renderToken) return;
           self.svgContent  = result.svg;
           self.renderError = '';
@@ -272,7 +280,7 @@ Vue.component('mermaid-preview', {
       }
     },
 
-    // ── 렌더 후 인터랙션 연결 ────────────────────────────────────
+    // 공통 렌더 후 인터랙션 연결 유틸
 
     postRenderSetup: function () {
       var canvas = this.$refs.canvas;
@@ -283,7 +291,7 @@ Vue.component('mermaid-preview', {
       var fitAfter = this._fitAfterRender;
       this._fitAfterRender = false;
 
-      // overlay와 interaction이 모두 같은 좌표계를 쓰도록 viewBox를 먼저 맞춘다.
+      // overlay와 interaction이 같은 좌표계를 쓰도록 viewBox를 먼저 맞춘다.
       this._setupViewport(svgEl, canvas, fitAfter);
 
       // 노드 위치와 SVG 요소 수집
@@ -330,6 +338,9 @@ Vue.component('mermaid-preview', {
         }
       });
 
+      this._refreshFloatingUiPositions();
+      this._syncSelectedEdgeVisuals();
+
     },
 
     scheduleFit: function () {
@@ -346,14 +357,129 @@ Vue.component('mermaid-preview', {
       if (!nodeEl) return;
 
       var rect = nodeEl.getBoundingClientRect();
+      var previewRect = this.$refs.canvas && this.$refs.canvas.getBoundingClientRect
+        ? this.$refs.canvas.getBoundingClientRect()
+        : this.$el.getBoundingClientRect();
       this.selectedNodeId = nodeId;
       this.selectedEdgeIndex = null;
       this.contextMenu = {
         nodeId: nodeId,
-        x: Math.round(rect.left + rect.width / 2),
-        y: Math.round(rect.top + Math.max(18, rect.height * 0.35))
+        anchorType: 'node',
+        x: Math.round(rect.left - previewRect.left + rect.width / 2),
+        y: Math.round(rect.top - previewRect.top + Math.max(18, rect.height * 0.35))
       };
       this._pendingContextMenuNodeId = null;
+    },
+
+    _refreshFloatingUiPositions: function () {
+      var previewRect = this.$refs.canvas && this.$refs.canvas.getBoundingClientRect
+        ? this.$refs.canvas.getBoundingClientRect()
+        : (this.$el && this.$el.getBoundingClientRect ? this.$el.getBoundingClientRect() : null);
+      if (this.contextMenu && this.contextMenu.anchorType === 'node') {
+        var nodeEl = this._elements && this._elements[this.contextMenu.nodeId];
+        if (nodeEl && previewRect) {
+          var nodeRect = nodeEl.getBoundingClientRect();
+          this.contextMenu = Object.assign({}, this.contextMenu, {
+            x: Math.round(nodeRect.left - previewRect.left + nodeRect.width + 10),
+            y: Math.round(nodeRect.top - previewRect.top + Math.min(24, nodeRect.height * 0.5))
+          });
+        }
+      }
+
+      if (this.edgeToolbar && this.edgeToolbar.anchorType === 'edge') {
+        var edgeData = this._edgePaths && this._edgePaths[this.edgeToolbar.edgeIndex];
+        var edgeEl = edgeData && (edgeData.path || edgeData.el);
+        if (edgeEl && previewRect) {
+          var edgeRect = edgeEl.getBoundingClientRect();
+          this.edgeToolbar = Object.assign({}, this.edgeToolbar, {
+            x: Math.round(edgeRect.left - previewRect.left + edgeRect.width / 2),
+            y: Math.round(edgeRect.top - previewRect.top - 8)
+          });
+        }
+      }
+    },
+
+    _syncSelectedEdgeVisuals: function () {
+      var selectedIndex = this.selectedEdgeIndex;
+      var edgePaths = this._edgePaths || [];
+      for (var i = 0; i < edgePaths.length; i++) {
+        var edgeData = edgePaths[i];
+        if (!edgeData) continue;
+
+        var isSelected = edgeData.index === selectedIndex;
+        var edgeEl = edgeData.el;
+        var pathEl = edgeData.path;
+        var hitEl = edgeData.hit;
+
+        if (edgeEl && edgeEl.classList) {
+          edgeEl.classList.toggle('edge-selected', isSelected);
+          edgeEl.classList.toggle('edge-hovered', isSelected);
+        }
+
+        if (pathEl && pathEl.classList) {
+          pathEl.classList.toggle('edge-selected', isSelected);
+          pathEl.classList.toggle('edge-hovered', isSelected);
+          if (isSelected) {
+            pathEl.style.setProperty('filter', 'drop-shadow(0 0 8px rgba(21, 101, 192, 0.28))', 'important');
+          } else {
+            pathEl.style.removeProperty('filter');
+          }
+        }
+
+        var innerPaths = edgeEl && edgeEl.querySelectorAll ? edgeEl.querySelectorAll('path') : [];
+        for (var j = 0; j < innerPaths.length; j++) {
+          innerPaths[j].classList.toggle('edge-selected', isSelected);
+          innerPaths[j].classList.toggle('edge-hovered', isSelected);
+        }
+
+        if (hitEl && hitEl.setAttribute) {
+          if (hitEl.classList) {
+            hitEl.classList.toggle('edge-hit-selected', isSelected);
+          }
+          hitEl.setAttribute('stroke', isSelected ? '#2563eb' : '#000');
+          hitEl.setAttribute('stroke-opacity', isSelected ? '0.18' : '0.003');
+          hitEl.setAttribute('stroke-width', isSelected ? '16' : '16');
+        }
+      }
+    },
+
+    _clearEdgeVisualState: function () {
+      var edgePaths = this._edgePaths || [];
+      for (var i = 0; i < edgePaths.length; i++) {
+        var edgeData = edgePaths[i];
+        if (!edgeData) continue;
+
+        var edgeEl = edgeData.el;
+        var pathEl = edgeData.path;
+        var hitEl = edgeData.hit;
+
+        if (edgeEl && edgeEl.classList) {
+          edgeEl.classList.remove('edge-selected');
+          edgeEl.classList.remove('edge-hovered');
+        }
+
+        if (pathEl && pathEl.classList) {
+          pathEl.classList.remove('edge-selected');
+          pathEl.classList.remove('edge-hovered');
+          pathEl.style.removeProperty('filter');
+        }
+
+        var innerPaths = edgeEl && edgeEl.querySelectorAll ? edgeEl.querySelectorAll('path') : [];
+        for (var j = 0; j < innerPaths.length; j++) {
+          innerPaths[j].classList.remove('edge-selected');
+          innerPaths[j].classList.remove('edge-hovered');
+          innerPaths[j].style.removeProperty('filter');
+        }
+
+        if (hitEl && hitEl.classList) {
+          hitEl.classList.remove('edge-hit-selected');
+        }
+        if (hitEl && hitEl.setAttribute) {
+          hitEl.setAttribute('stroke', '#000');
+          hitEl.setAttribute('stroke-opacity', '0.003');
+          hitEl.setAttribute('stroke-width', '16');
+        }
+      }
     },
 
     _applyTransform: function () {
@@ -364,6 +490,8 @@ Vue.component('mermaid-preview', {
       this._svgEl.style.transformOrigin = '0 0';
       this._svgEl.style.transform =
         'translate(' + snappedPanX + 'px, ' + snappedPanY + 'px) scale(' + snappedZoom + ')';
+      var self = this;
+      requestAnimationFrame(function () { self._refreshFloatingUiPositions(); });
     },
 
     _getContentBounds: function () {
@@ -421,7 +549,7 @@ Vue.component('mermaid-preview', {
       var self = this;
 
       if (forcefit || !hadPrev) {
-        // 브라우저 레이아웃이 완성된 후 fit 해야 canvas 크기를 정확히 읽을 수 있다.
+        // 브라우저 레이아웃 완료 후 fit 해야 canvas 크기를 정확히 읽을 수 있다.
         requestAnimationFrame(function () { self.fitView(); });
       } else {
         this.cfgZoom = prevZoom;
@@ -435,7 +563,7 @@ Vue.component('mermaid-preview', {
         self._zoomAtClient(e.deltaY < 0 ? 1.1 : 0.9, e.clientX, e.clientY);
       };
 
-      // 팬은 배경에서만 시작해서 node/edge interaction과 충돌하지 않게 한다.
+      // 패닝은 배경에서만 시작해서 node/edge interaction과 충돌하지 않게 한다.
       canvas.onmousedown = function (e) {
         if (e.button !== 0) return;
         if (!self._canPreparePan(e.target, svgEl)) return;
@@ -537,6 +665,27 @@ Vue.component('mermaid-preview', {
             nodeEl.classList.toggle('selected', val === nodeId);
           }, { immediate: true });
         },
+        watchEdgeSelection: function (edgeIndex, edgeEl) {
+          self.$watch('selectedEdgeIndex', function (val) {
+            if (edgeEl) {
+              var isSelected = val === edgeIndex;
+              if (edgeEl.classList) {
+                edgeEl.classList.toggle('edge-selected', isSelected);
+                edgeEl.classList.toggle('edge-hovered', isSelected);
+              }
+              var edgePaths = edgeEl.querySelectorAll ? edgeEl.querySelectorAll('path') : [];
+              for (var i = 0; i < edgePaths.length; i++) {
+                edgePaths[i].classList.toggle('edge-selected', isSelected);
+                edgePaths[i].classList.toggle('edge-hovered', isSelected);
+              }
+            }
+          }, { immediate: true });
+        },
+        getPreviewRect: function () {
+          return self.$refs.canvas && self.$refs.canvas.getBoundingClientRect
+            ? self.$refs.canvas.getBoundingClientRect()
+            : (self.$el && self.$el.getBoundingClientRect ? self.$el.getBoundingClientRect() : null);
+        },
         watchSequenceParticipantSelection: function (participantId, el) {
           self.$watch('selectedSequenceParticipantId', function (val) {
             el.classList.toggle('sequence-participant-selected', val === participantId);
@@ -554,6 +703,11 @@ Vue.component('mermaid-preview', {
               hitEl.classList.toggle('sequence-hit-selected', val === messageIndex);
             }
           }, { immediate: true });
+        },
+        getPreviewRect: function () {
+          return self.$refs.canvas && self.$refs.canvas.getBoundingClientRect
+            ? self.$refs.canvas.getBoundingClientRect()
+            : (self.$el && self.$el.getBoundingClientRect ? self.$el.getBoundingClientRect() : null);
         },
         focusEditInput: function () {
           self.$nextTick(function () {
@@ -583,7 +737,7 @@ Vue.component('mermaid-preview', {
       return ctx;
     },
 
-    // ── 노드 편집 ────────────────────────────────────────────────
+    // 공통 노드 편집 유틸
 
     confirmNodeEdit: function () {
       if (this.editingNodeId && this.editingText.trim()) {
@@ -608,7 +762,7 @@ Vue.component('mermaid-preview', {
       if (e.key === 'Escape') { this.cancelNodeEdit(); }
     },
 
-    // ── 엣지 편집 ────────────────────────────────────────────────
+    // 공통 엣지 편집 유틸
 
     confirmEdgeEdit: function () {
       if (this.editingEdgeIndex !== null) {
@@ -620,12 +774,16 @@ Vue.component('mermaid-preview', {
       this.editingEdgeIndex = null;
       this.editingEdgeText  = '';
       this.editingEdgeColor = '#5c7ab0';
+      this.selectedEdgeIndex = null;
+      this._clearEdgeVisualState();
     },
 
     cancelEdgeEdit: function () {
       this.editingEdgeIndex = null;
       this.editingEdgeText  = '';
       this.editingEdgeColor = '#5c7ab0';
+      this.selectedEdgeIndex = null;
+      this._clearEdgeVisualState();
     },
 
     onEdgeEditKeyDown: function (e) {
@@ -633,7 +791,7 @@ Vue.component('mermaid-preview', {
       if (e.key === 'Escape') { this.cancelEdgeEdit(); }
     },
 
-    // ── 시퀀스 편집 ──────────────────────────────────────────────
+    // 공통 시퀀스 편집 유틸
 
     confirmSequenceParticipantEdit: function () {
       if (this.editingSequenceParticipantId && this.editingSequenceParticipantText.trim()) {
@@ -677,14 +835,40 @@ Vue.component('mermaid-preview', {
       if (e.key === 'Escape') { this.cancelSequenceMessageEdit(); }
     },
 
-    // ── 노드 컨텍스트 메뉴 액션 ─────────────────────────────────
+    // 공통 노드 컨텍스트 메뉴 액션 유틸
 
     contextEditNode: function () {
       if (!this.contextMenu) return;
       var nodeId = this.contextMenu.nodeId;
       var nodeEl = this._elements[nodeId];
       this.contextMenu = null;
-      if (nodeEl) SvgNodeHandler.startInlineEdit(nodeId, nodeEl, this._buildCtxLite());
+      if (!nodeEl) return;
+      var canvas = this.$refs.canvas;
+      var canvasRect = canvas && canvas.getBoundingClientRect ? canvas.getBoundingClientRect() : null;
+      var labelEl = nodeEl.querySelector('foreignObject, .label, text');
+      var targetRect = labelEl && labelEl.getBoundingClientRect ? labelEl.getBoundingClientRect() : nodeEl.getBoundingClientRect();
+      var node = null;
+      var nodes = this.model.nodes || [];
+      for (var i = 0; i < nodes.length; i++) {
+        if (nodes[i].id === nodeId) {
+          node = nodes[i];
+          break;
+        }
+      }
+      var width = Math.max(140, targetRect.width + 28, (((node && (node.text || node.id)) || '').length * 9) + 36);
+      var left = canvasRect ? (targetRect.left - canvasRect.left + (targetRect.width / 2) - (width / 2)) : 0;
+      var top = canvasRect ? (targetRect.top - canvasRect.top + (targetRect.height / 2) - 18) : 0;
+      this.editingNodeId = nodeId;
+      this.editingText = node ? (node.text || node.id) : '';
+      this.editingNodeColor = node && node.fill ? node.fill : '#e2e8f0';
+      this.editInputStyle = {
+        position: 'absolute',
+        left: Math.max(8, left) + 'px',
+        top: Math.max(8, top) + 'px',
+        zIndex: 1000,
+        width: width + 'px'
+      };
+      this.$nextTick(this._buildCtxLite().focusEditInput);
     },
 
     contextDeleteNode: function () {
@@ -733,17 +917,49 @@ Vue.component('mermaid-preview', {
       return baseId;
     },
 
-    // ── 엣지 툴바 액션 ───────────────────────────────────────────
+    // 공통 엣지 툴바 액션 유틸
 
     edgeToolbarEdit: function () {
       if (!this.edgeToolbar) return;
       var idx = this.edgeToolbar.edgeIndex;
-      var x   = this.edgeToolbar.x;
-      var y   = this.edgeToolbar.y;
       this.edgeToolbar = null;
       var canvas = this.$refs.canvas;
       var svgEl  = canvas ? canvas.querySelector('svg') : null;
-      SvgEdgeHandler.startInlineEdit(idx, x, y, svgEl, this._positions, this._buildCtxLite());
+      var canvasRect = canvas && canvas.getBoundingClientRect ? canvas.getBoundingClientRect() : null;
+      var edge = (this.model.edges || [])[idx];
+      if (!edge || !canvasRect) return;
+
+      var targetRect = null;
+      if (svgEl && edge.text) {
+        var labels = svgEl.querySelectorAll('.edgeLabel');
+        for (var i = 0; i < labels.length; i++) {
+          if (((labels[i].textContent || '').trim()) === ((edge.text || '').trim())) {
+            targetRect = labels[i].getBoundingClientRect();
+            break;
+          }
+        }
+      }
+      if (!targetRect) {
+        var edgeData = this._edgePaths && this._edgePaths[idx];
+        var pathEl = edgeData && (edgeData.path || edgeData.el);
+        if (pathEl && pathEl.getBoundingClientRect) {
+          targetRect = pathEl.getBoundingClientRect();
+        }
+      }
+      if (!targetRect) return;
+
+      this.selectedEdgeIndex = idx;
+      this.editingEdgeIndex = idx;
+      this.editingEdgeText = edge.text || '';
+      this.editingEdgeColor = edge.color || '#5c7ab0';
+      this.edgeEditInputStyle = {
+        position: 'absolute',
+        left: Math.max(8, targetRect.left - canvasRect.left + (targetRect.width / 2) - 80) + 'px',
+        top: Math.max(8, targetRect.top - canvasRect.top + (targetRect.height / 2) - 18) + 'px',
+        zIndex: 1000,
+        width: '160px'
+      };
+      this.$nextTick(this._buildCtxLite().focusEdgeEditInput);
     },
 
     edgeToolbarDelete: function () {
@@ -760,9 +976,11 @@ Vue.component('mermaid-preview', {
         color: color || ''
       });
       this.edgeToolbar = null;
+      this.selectedEdgeIndex = null;
+      this._clearEdgeVisualState();
     },
 
-    // ── 시퀀스 툴바 액션 ────────────────────────────────────────
+    // 공통 시퀀스 툴바 액션 유틸
 
     sequenceToolbarEdit: function () {
       if (!this.sequenceToolbar) return;
@@ -821,7 +1039,7 @@ Vue.component('mermaid-preview', {
       this.sequenceToolbar = null;
     },
 
-    // postRenderSetup 바깥에서도 쓸 수 있는 경량 ctx
+    // postRenderSetup 바깥에서도 재사용하는 경량 ctx
     _buildCtxLite: function () {
       var self = this;
       return {
@@ -922,153 +1140,60 @@ Vue.component('mermaid-preview', {
 
   template: '\
     <div class="preview-area" @click.self="selectedNodeId = null; selectedEdgeIndex = null; selectedSequenceParticipantId = null; selectedSequenceMessageIndex = null;">\
-      \
-      <!-- Port drag hint -->\
       <div v-if="portDragging" class="edge-mode-overlay" style="background: var(--success);">\
         Release on target node to connect\
       </div>\
-      \
-      <!-- SVG canvas -->\
-      <div v-if="svgContent" :key="renderCounter" ref="canvas" class="preview-area__canvas" v-html="svgContent"></div>\
+      <div v-if="svgContent" :key="renderCounter" ref="canvas" class="preview-area__canvas">\
+        <div class="preview-area__svg-host" v-html="svgContent"></div>\
+        <div v-if="editingNodeId" class="node-edit-overlay" :style="editInputStyle">\
+          <input ref="editInput" class="node-edit-input" v-model="editingText" @keydown="onNodeEditKeyDown" @blur="confirmNodeEdit" />\
+        </div>\
+        <div v-if="editingEdgeIndex !== null" class="node-edit-overlay" :style="edgeEditInputStyle">\
+          <input ref="editEdgeInput" class="node-edit-input" v-model="editingEdgeText" placeholder="Edge label" @keydown="onEdgeEditKeyDown" @blur="confirmEdgeEdit" />\
+        </div>\
+        <div v-if="editingSequenceParticipantId" class="node-edit-overlay" :style="sequenceParticipantEditStyle">\
+          <input ref="sequenceParticipantInput" class="node-edit-input" v-model="editingSequenceParticipantText" @keydown="onSequenceParticipantEditKeyDown" @blur="confirmSequenceParticipantEdit" />\
+        </div>\
+        <div v-if="editingSequenceMessageIndex !== null" class="node-edit-overlay" :style="sequenceMessageEditStyle">\
+          <input ref="sequenceMessageInput" class="node-edit-input" v-model="editingSequenceMessageText" placeholder="Message text" @keydown="onSequenceMessageEditKeyDown" @blur="confirmSequenceMessageEdit" />\
+        </div>\
+        <div v-if="contextMenu" class="context-menu" :style="{ left: contextMenu.x + &quot;px&quot;, top: contextMenu.y + &quot;px&quot; }" @click.stop>\
+          <div class="context-menu__section-title">Change Shape</div>\
+          <div class="context-menu__shapes-grid">\
+            <button v-for="s in $options.SHAPES" :key="s.key" class="context-menu__shape-btn" :title="s.name" @click="contextChangeShape(s.key)">\
+              <span class="context-menu__shape-icon" :class="&quot;context-menu__shape-icon--&quot; + s.key"></span>\
+              <span class="context-menu__shape-text">{{ s.name }}</span>\
+            </button>\
+          </div>\
+          <div class="context-menu__section-title">Color</div>\
+          <div class="context-menu__color-row">\
+            <button class="context-menu__color-btn context-menu__color-btn--clear" title="default" @click="contextChangeNodeColor(&quot;&quot;)">x</button>\
+            <button v-for="color in $options.COLOR_PALETTE" :key="color.key" class="context-menu__color-btn" :style="{ backgroundColor: color.value }" :title="color.key" @click="contextChangeNodeColor(color.value)"></button>\
+          </div>\
+          <div class="context-menu__separator"></div>\
+          <div class="context-menu__item" @click="contextEditNode"><span class="context-menu__item-icon">T</span> Edit Text</div>\
+          <div class="context-menu__item context-menu__item--danger" @click="contextDeleteNode"><span class="context-menu__item-icon">X</span> Delete Node</div>\
+        </div>\
+        <div v-if="edgeToolbar" class="edge-toolbar" :style="{ left: edgeToolbar.x + &quot;px&quot;, top: edgeToolbar.y + &quot;px&quot; }" @click.stop>\
+          <button class="edge-toolbar__btn" @click="edgeToolbarEdit" title="Edit label">Label</button>\
+          <div class="edge-toolbar__palette">\
+            <button class="context-menu__color-btn context-menu__color-btn--clear" title="default" @click="edgeToolbarChangeColor(&quot;&quot;)">x</button>\
+            <button v-for="color in $options.COLOR_PALETTE" :key="color.key" class="context-menu__color-btn" :style="{ backgroundColor: color.value }" :title="color.key" @click="edgeToolbarChangeColor(color.value)"></button>\
+          </div>\
+          <div class="edge-toolbar__sep"></div>\
+          <button class="edge-toolbar__btn edge-toolbar__btn--danger" @click="edgeToolbarDelete" title="Delete edge">Delete</button>\
+        </div>\
+        <div v-if="sequenceToolbar" class="sequence-toolbar" :style="{ left: sequenceToolbar.x + &quot;px&quot;, top: sequenceToolbar.y + &quot;px&quot; }" @click.stop>\
+          <button class="edge-toolbar__btn" @click="sequenceToolbarEdit">Edit</button>\
+          <button v-if="sequenceToolbar.type === &quot;message&quot;" class="edge-toolbar__btn" @click="sequenceToolbarReverse">Reverse</button>\
+          <button v-if="sequenceToolbar.type === &quot;message&quot;" class="edge-toolbar__btn" @click="sequenceToolbarToggleLineType">Line</button>\
+          <button class="edge-toolbar__btn edge-toolbar__btn--danger" @click="sequenceToolbarDelete">Delete</button>\
+        </div>\
+      </div>\
       <div v-else class="preview-area__empty">\
-        <div class="preview-area__empty-icon">◇</div>\
-        <div class="preview-area__empty-text">{{ renderError || "Mermaid 스크립트를 입력하면 여기에 렌더링됩니다" }}</div>\
-        <div style="color: var(--text-muted); font-size: 12px; margin-top: 4px;">{{ renderError ? "렌더링 실패로 이전 SVG를 비웠습니다" : "플로우차트와 시퀀스 다이어그램을 지원합니다" }}</div>\
-      </div>\
-      \
-      <!-- Node inline edit -->\
-      <div v-if="editingNodeId" class="node-edit-overlay" :style="editInputStyle">\
-        <input\
-          ref="editInput"\
-          class="node-edit-input"\
-          v-model="editingText"\
-          @keydown="onNodeEditKeyDown"\
-          @blur="confirmNodeEdit"\
-        />\
-      </div>\
-      \
-      <!-- Edge inline edit -->\
-      <div v-if="editingEdgeIndex !== null" class="node-edit-overlay" :style="edgeEditInputStyle">\
-        <input\
-          ref="editEdgeInput"\
-          class="node-edit-input"\
-          v-model="editingEdgeText"\
-          placeholder="Edge label"\
-          @keydown="onEdgeEditKeyDown"\
-          @blur="confirmEdgeEdit"\
-        />\
-      </div>\
-      \
-      <!-- Sequence participant inline edit -->\
-      <div v-if="editingSequenceParticipantId" class="node-edit-overlay" :style="sequenceParticipantEditStyle">\
-        <input\
-          ref="sequenceParticipantInput"\
-          class="node-edit-input"\
-          v-model="editingSequenceParticipantText"\
-          @keydown="onSequenceParticipantEditKeyDown"\
-          @blur="confirmSequenceParticipantEdit"\
-        />\
-      </div>\
-      \
-      <!-- Sequence message inline edit -->\
-      <div v-if="editingSequenceMessageIndex !== null" class="node-edit-overlay" :style="sequenceMessageEditStyle">\
-        <input\
-          ref="sequenceMessageInput"\
-          class="node-edit-input"\
-          v-model="editingSequenceMessageText"\
-          placeholder="Message text"\
-          @keydown="onSequenceMessageEditKeyDown"\
-          @blur="confirmSequenceMessageEdit"\
-        />\
-      </div>\
-      \
-      <!-- Node context menu -->\
-      <div\
-        v-if="contextMenu"\
-        class="context-menu"\
-        :style="{ left: contextMenu.x + \'px\', top: contextMenu.y + \'px\' }"\
-        @click.stop\
-      >\
-        <div class="context-menu__section-title">Change Shape</div>\
-        <div class="context-menu__shapes-grid">\
-          <button\
-            v-for="s in $options.SHAPES"\
-            :key="s.key"\
-            class="context-menu__shape-btn"\
-            :title="s.name"\
-            @click="contextChangeShape(s.key)"\
-          >\
-            <span class="context-menu__shape-icon" :class="\'context-menu__shape-icon--\' + s.key"></span>\
-            <span class="context-menu__shape-text">{{ s.name }}</span>\
-          </button>\
-        </div>\
-        <div class="context-menu__section-title">Color</div>\
-        <div class="context-menu__color-row">\
-          <button\
-            class="context-menu__color-btn context-menu__color-btn--clear"\
-            title="default"\
-            @click="contextChangeNodeColor(\'\')"\
-          >×</button>\
-          <button\
-            v-for="color in $options.COLOR_PALETTE"\
-            :key="color.key"\
-            class="context-menu__color-btn"\
-            :style="{ backgroundColor: color.value }"\
-            :title="color.key"\
-            @click="contextChangeNodeColor(color.value)"\
-          ></button>\
-        </div>\
-        <div class="context-menu__separator"></div>\
-        <div class="context-menu__item" @click="contextEditNode">\
-          <span class="context-menu__item-icon">✎</span> Edit Text\
-        </div>\
-        <div class="context-menu__item context-menu__item--danger" @click="contextDeleteNode">\
-          <span class="context-menu__item-icon">✕</span> Delete Node\
-        </div>\
-      </div>\
-      \
-      <!-- Edge floating toolbar -->\
-      <div\
-        v-if="edgeToolbar"\
-        class="edge-toolbar"\
-        :style="{ left: edgeToolbar.x + \'px\', top: edgeToolbar.y + \'px\' }"\
-        @click.stop\
-      >\
-        <button class="edge-toolbar__btn" @click="edgeToolbarEdit" title="Edit label">\
-          ✎ Label\
-        </button>\
-        <div class="edge-toolbar__palette">\
-          <button\
-            class="context-menu__color-btn context-menu__color-btn--clear"\
-            title="default"\
-            @click="edgeToolbarChangeColor(\'\')"\
-          >×</button>\
-          <button\
-            v-for="color in $options.COLOR_PALETTE"\
-            :key="color.key"\
-            class="context-menu__color-btn"\
-            :style="{ backgroundColor: color.value }"\
-            :title="color.key"\
-            @click="edgeToolbarChangeColor(color.value)"\
-          ></button>\
-        </div>\
-        <div class="edge-toolbar__sep"></div>\
-        <button class="edge-toolbar__btn edge-toolbar__btn--danger" @click="edgeToolbarDelete" title="Delete edge">\
-          ✕ Delete\
-        </button>\
-      </div>\
-      \
-      <!-- Sequence floating toolbar -->\
-      <div\
-        v-if="sequenceToolbar"\
-        class="sequence-toolbar"\
-        :style="{ left: sequenceToolbar.x + \'px\', top: sequenceToolbar.y + \'px\' }"\
-        @click.stop\
-      >\
-        <button class="edge-toolbar__btn" @click="sequenceToolbarEdit">✎ Edit</button>\
-        <button v-if="sequenceToolbar.type === \'message\'" class="edge-toolbar__btn" @click="sequenceToolbarReverse">↔ Reverse</button>\
-        <button v-if="sequenceToolbar.type === \'message\'" class="edge-toolbar__btn" @click="sequenceToolbarToggleLineType">⋯ Line</button>\
-        <button class="edge-toolbar__btn edge-toolbar__btn--danger" @click="sequenceToolbarDelete">✕ Delete</button>\
+        <div class="preview-area__empty-icon">[]</div>\
+        <div class="preview-area__empty-text">{{ renderError || &quot;Enter Mermaid script to render a diagram here.&quot; }}</div>\
+        <div style="color: var(--text-muted); font-size: 12px; margin-top: 4px;">{{ renderError ? &quot;Rendering failed. Check the Mermaid script.&quot; : &quot;Flowchart and sequence diagrams are supported.&quot; }}</div>\
       </div>\
     </div>\
   '
