@@ -10,7 +10,7 @@
   if (window.mermaid) {
     window.mermaid.initialize({
       startOnLoad: false,
-      theme: 'base',
+      theme: 'default',
       securityLevel: 'loose',
       flowchart: {
         htmlLabels: true,
@@ -25,25 +25,6 @@
         diagramMarginY: 40,
         actorMargin: 80,
         messageMargin: 48
-      },
-      themeVariables: {
-        darkMode: false,
-        background: '#ffffff',
-        primaryColor: '#e8edf8',
-        primaryTextColor: '#1b2a4a',
-        primaryBorderColor: '#b0bdd6',
-        secondaryColor: '#f0f3fb',
-        tertiaryColor: '#f4f6fb',
-        lineColor: '#5c7ab0',
-        textColor: '#1b2a4a',
-        mainBkg: '#e8edf8',
-        nodeBorder: '#b0bdd6',
-        clusterBkg: '#f4f6fb',
-        clusterBorder: '#c5cedf',
-        titleColor: '#1b2a4a',
-        edgeLabelBackground: '#ffffff',
-        fontFamily: 'Inter, sans-serif',
-        fontSize: '14px'
       }
     });
   }
