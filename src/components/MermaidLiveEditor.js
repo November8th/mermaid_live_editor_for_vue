@@ -222,7 +222,6 @@ Vue.component('mermaid-live-editor', {
       edges.push({ from: data.from, to: data.to, text: '', type: '-->' });
       this.model = Object.assign({}, this.model, { edges: edges });
       this.updateScriptFromModel();
-      this._schedulePreviewFit();
     },
 
     addSequenceParticipant: function () {
