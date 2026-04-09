@@ -1,59 +1,57 @@
 /**
- * MermaidToolbar Component
- * Toolbar for diagram manipulation actions.
+ * MermaidToolbar 컴포넌트
+ * Undo/Redo, 방향 변경, 줌, 전체 맞춤, SVG 복사를 제공한다.
  */
 
 Vue.component('mermaid-toolbar', {
   props: {
-    direction: { type: String, default: 'TD' },
-    edgeMode: { type: Boolean, default: false },
-    selectedNode: { type: String, default: '' },
-    selectedEdge: { type: Object, default: null }
+    diagramType: { type: String,  default: 'flowchart' },
+    direction: { type: String,  default: 'TD'    },
+    canUndo:   { type: Boolean, default: false   },
+    canRedo:   { type: Boolean, default: false   }
+  },
+  computed: {
+    isFlowchart: function () {
+      return this.diagramType !== 'sequenceDiagram';
+    }
   },
   methods: {
-    addNode: function (e) {
-      if (!e.target.value) return;
-      this.$emit('add-node', e.target.value);
-      e.target.value = '';
-    },
-    toggleEdgeMode: function () {
-      this.$emit('toggle-edge-mode');
-    },
-    deleteSelected: function () {
-      this.$emit('delete-selected');
-    },
-    changeDirection: function (e) {
-      this.$emit('change-direction', e.target.value);
-    },
-    fitView: function () {
-      this.$emit('fit-view');
-    }
+    addNode:         function () { this.$emit('add-node'); },
+    addSequenceParticipant: function () { this.$emit('add-sequence-participant'); },
+    addSequenceMessage: function () { this.$emit('add-sequence-message'); },
+    undo:            function () { this.$emit('undo'); },
+    redo:            function () { this.$emit('redo'); },
+    changeDirection: function (e) { this.$emit('change-direction', e.target.value); },
+    zoomOut:         function () { this.$emit('zoom-out'); },
+    zoomIn:          function () { this.$emit('zoom-in'); },
+    fitView:         function () { this.$emit('fit-view'); },
+    copySvg:         function () { this.$emit('copy-svg'); }
   },
   template: '\
     <div class="toolbar">\
       <div class="toolbar__group">\
-        <select class="toolbar__select" @change="addNode" title="Add Node shape" style="font-weight: 500;">\
-          <option value="" disabled selected>＋ Add Node</option>\
-          <option value="rect">Rectangle [ ]</option>\
-          <option value="round">Round ( )</option>\
-          <option value="diamond">Diamond { }</option>\
-          <option value="double_circle">Circle (( ))</option>\
-        </select>\
-      </div>\
-      <div class="toolbar__separator"></div>\
-      <div class="toolbar__group">\
-        <button\
-          class="toolbar__btn toolbar__btn--danger"\
-          @click="deleteSelected"\
-          :disabled="!selectedNode && !selectedEdge"\
-          title="Delete Selected (Del)"\
-        >\
-          <span class="toolbar__btn-icon">✕</span> Delete\
+        <button v-if="isFlowchart" class="toolbar__btn toolbar__btn--active" @click="addNode" title="Add Node (or double-click canvas)">\
+          <span class="toolbar__btn-icon">+</span> Add Node\
+        </button>\
+        <button v-else class="toolbar__btn toolbar__btn--active" @click="addSequenceParticipant" title="Add participant">\
+          <span class="toolbar__btn-icon">+</span> Participant\
+        </button>\
+        <button v-if="!isFlowchart" class="toolbar__btn" @click="addSequenceMessage" title="Add message">\
+          <span class="toolbar__btn-icon">↔</span> Message\
         </button>\
       </div>\
       <div class="toolbar__separator"></div>\
       <div class="toolbar__group">\
-        <select class="toolbar__select" :value="direction" @change="changeDirection" title="Direction">\
+        <button class="toolbar__btn" @click="undo" :disabled="!canUndo" title="Undo (Ctrl+Z)">\
+          ↩ Undo\
+        </button>\
+        <button class="toolbar__btn" @click="redo" :disabled="!canRedo" title="Redo (Ctrl+Y)">\
+          ↪ Redo\
+        </button>\
+      </div>\
+      <div v-if="isFlowchart" class="toolbar__separator"></div>\
+      <div v-if="isFlowchart" class="toolbar__group">\
+        <select class="toolbar__select" :value="direction" @change="changeDirection" title="Layout direction">\
           <option value="TD">↓ Top → Down</option>\
           <option value="LR">→ Left → Right</option>\
           <option value="BT">↑ Bottom → Top</option>\
@@ -62,8 +60,13 @@ Vue.component('mermaid-toolbar', {
       </div>\
       <div class="toolbar__separator"></div>\
       <div class="toolbar__group">\
+        <button class="toolbar__btn" @click="zoomOut" title="Zoom Out">−</button>\
+        <button class="toolbar__btn" @click="zoomIn" title="Zoom In">+</button>\
         <button class="toolbar__btn" @click="fitView" title="Fit to View">\
-          <span class="toolbar__btn-icon">⊞</span> Fit\
+          ⊞ Fit View\
+        </button>\
+        <button class="toolbar__btn" @click="copySvg" title="Copy SVG to clipboard">\
+          ⊡ Copy SVG\
         </button>\
       </div>\
     </div>\

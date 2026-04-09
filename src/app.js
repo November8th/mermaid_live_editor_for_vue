@@ -1,16 +1,16 @@
 /**
- * App Entry Point
- * Initializes the Vue 2 application and mounts the MermaidLiveEditor.
+ * 앱 진입점
+ * Vue 2 애플리케이션을 초기화하고 MermaidLiveEditor를 마운트한다.
  */
 
 (function () {
   'use strict';
 
-  // Initialize Mermaid with dark theme
+  // Mermaid는 startOnLoad를 끄고, 항상 preview 컴포넌트가 수동 render를 호출한다.
   if (window.mermaid) {
     window.mermaid.initialize({
       startOnLoad: false,
-      theme: 'dark',
+      theme: 'base',
       securityLevel: 'loose',
       flowchart: {
         htmlLabels: true,
@@ -20,29 +20,35 @@
         rankSpacing: 50,
         useMaxWidth: false
       },
+      sequence: {
+        useMaxWidth: false,
+        diagramMarginY: 40,
+        actorMargin: 80,
+        messageMargin: 48
+      },
       themeVariables: {
-        darkMode: true,
-        background: '#1c1f2e',
-        primaryColor: '#6366f1',
-        primaryTextColor: '#e4e6f0',
-        primaryBorderColor: '#818cf8',
-        secondaryColor: '#232738',
-        tertiaryColor: '#2a2f45',
-        lineColor: '#818cf8',
-        textColor: '#e4e6f0',
-        mainBkg: '#232738',
-        nodeBorder: '#818cf8',
-        clusterBkg: '#1c1f2e',
-        clusterBorder: '#5c6380',
-        titleColor: '#e4e6f0',
-        edgeLabelBackground: '#232738',
+        darkMode: false,
+        background: '#ffffff',
+        primaryColor: '#e8edf8',
+        primaryTextColor: '#1b2a4a',
+        primaryBorderColor: '#b0bdd6',
+        secondaryColor: '#f0f3fb',
+        tertiaryColor: '#f4f6fb',
+        lineColor: '#5c7ab0',
+        textColor: '#1b2a4a',
+        mainBkg: '#e8edf8',
+        nodeBorder: '#b0bdd6',
+        clusterBkg: '#f4f6fb',
+        clusterBorder: '#c5cedf',
+        titleColor: '#1b2a4a',
+        edgeLabelBackground: '#ffffff',
         fontFamily: 'Inter, sans-serif',
         fontSize: '14px'
       }
     });
   }
 
-  // Create Vue instance
+  // Vue 인스턴스 생성
   new Vue({
     el: '#app',
     template: '<mermaid-live-editor></mermaid-live-editor>'

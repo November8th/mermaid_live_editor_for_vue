@@ -1,12 +1,13 @@
 /**
- * MermaidEditor Component
- * Left panel: Mermaid script textarea with status bar.
+ * MermaidEditor 컴포넌트
+ * 왼쪽 패널의 Mermaid 스크립트 textarea와 상태 바를 담당한다.
  */
 
 Vue.component('mermaid-editor', {
   props: {
     value: { type: String, default: '' },
-    error: { type: String, default: '' }
+    error: { type: String, default: '' },
+    diagramType: { type: String, default: 'flowchart' }
   },
   data: function () {
     return {
@@ -16,6 +17,7 @@ Vue.component('mermaid-editor', {
   },
   watch: {
     value: function (newVal) {
+      // 외부(model -> script) 갱신이 들어오면 textarea 로컬 상태도 따라간다.
       if (newVal !== this.localValue) {
         this.localValue = newVal;
       }
@@ -27,19 +29,34 @@ Vue.component('mermaid-editor', {
     },
     charCount: function () {
       return this.localValue ? this.localValue.length : 0;
+    },
+    placeholderText: function () {
+      if (this.diagramType === 'sequenceDiagram') {
+        return 'sequenceDiagram\n    Alice->>+John: Hello John, how are you?\n    John-->>-Alice: Hi Alice, I can hear you!';
+      }
+      return 'flowchart TD\n    A[Start] --> B[Process]\n    B --> C[End]';
+    },
+    statusText: function () {
+      return this.diagramType === 'sequenceDiagram' ? 'Mermaid Sequence Diagram' : 'Mermaid Flowchart';
     }
   },
   methods: {
     onInput: function (e) {
       this.localValue = e.target.value;
       var self = this;
+      if (this.diagramType === 'sequenceDiagram') {
+        clearTimeout(this.debounceTimer);
+        this.$emit('input', this.localValue);
+        return;
+      }
+      // 매 타이핑마다 바로 parse하지 않고 짧게 debounce해서 editor 입력감을 유지한다.
       clearTimeout(this.debounceTimer);
       this.debounceTimer = setTimeout(function () {
         self.$emit('input', self.localValue);
       }, 300);
     },
     onKeyDown: function (e) {
-      // Tab key support
+      // Tab 키 입력 시 실제 공백 4칸을 넣는다.
       if (e.key === 'Tab') {
         e.preventDefault();
         var textarea = e.target;
@@ -67,7 +84,7 @@ Vue.component('mermaid-editor', {
           :value="localValue"\
           @input="onInput"\
           @keydown="onKeyDown"\
-          placeholder="flowchart TD\n    A[Start] --> B[Process]\n    B --> C[End]"\
+          :placeholder="placeholderText"\
           spellcheck="false"\
         ></textarea>\
         <div v-if="error" class="code-editor__error">\
@@ -75,7 +92,7 @@ Vue.component('mermaid-editor', {
         </div>\
         <div class="code-editor__status">\
           <span>Lines: {{ lineCount }} | Chars: {{ charCount }}</span>\
-          <span>Mermaid Flowchart</span>\
+          <span>{{ statusText }}</span>\
         </div>\
       </div>\
     </div>\

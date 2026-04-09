@@ -17,8 +17,23 @@
   <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
 
   <!-- Core modules -->
+  <script src="src/sequence-parser.js"></script>
+  <script src="src/sequence-generator.js"></script>
   <script src="src/mermaid-parser.js"></script>
   <script src="src/mermaid-generator.js"></script>
+
+  <!-- Services -->
+  <script src="src/services/HistoryManager.js"></script>
+  <script src="src/services/StorageManager.js"></script>
+
+  <!-- Action modules (SvgPositionTracker must come first) -->
+  <script src="src/actions/SvgPositionTracker.js"></script>
+  <script src="src/actions/SvgNodeHandler.js"></script>
+  <script src="src/actions/SvgEdgeHandler.js"></script>
+  <script src="src/actions/PortDragHandler.js"></script>
+  <script src="src/actions/SequencePositionTracker.js"></script>
+  <script src="src/actions/SequenceMessageDragHandler.js"></script>
+  <script src="src/actions/SequenceSvgHandler.js"></script>
 
   <!-- Vue Components (order matters: children first) -->
   <script src="src/components/MermaidEditor.js"></script>
