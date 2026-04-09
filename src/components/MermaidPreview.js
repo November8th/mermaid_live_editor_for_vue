@@ -101,6 +101,13 @@ Vue.component('mermaid-preview', {
       self.sequenceToolbar = null;
     });
 
+    this._pointerDownCommitHandler = function (e) {
+      var target = e.target;
+      if (target && target.closest && target.closest('.node-edit-overlay')) return;
+      self._confirmActiveEdits();
+    };
+    document.addEventListener('mousedown', this._pointerDownCommitHandler, true);
+
     // 전역 키 입력: Delete, Escape, Ctrl+Z/Y
     document.addEventListener('keydown', function (e) {
       // input / textarea 포커스 중에는 가로채지 않는다.
@@ -153,6 +160,10 @@ Vue.component('mermaid-preview', {
   },
 
   beforeDestroy: function () {
+    if (this._pointerDownCommitHandler) {
+      document.removeEventListener('mousedown', this._pointerDownCommitHandler, true);
+      this._pointerDownCommitHandler = null;
+    }
     if (this._windowResizeHandler) {
       window.removeEventListener('resize', this._windowResizeHandler);
       this._windowResizeHandler = null;
@@ -168,6 +179,13 @@ Vue.component('mermaid-preview', {
   },
 
   methods: {
+
+    _confirmActiveEdits: function () {
+      if (this.editingNodeId) this.confirmNodeEdit();
+      if (this.editingEdgeIndex !== null) this.confirmEdgeEdit();
+      if (this.editingSequenceParticipantId) this.confirmSequenceParticipantEdit();
+      if (this.editingSequenceMessageIndex !== null) this.confirmSequenceMessageEdit();
+    },
 
     // ── 렌더링 ───────────────────────────────────────────────────
 
