@@ -375,35 +375,40 @@ Vue.component('mermaid-preview', {
       }
     },
 
-    // ==================== EDGE PATH MAPPING (Mermaid v11) ====================
+    _restoreViewport: function (prevBase, prevCurrent) {
+      if (!prevBase || !prevCurrent || !this._baseViewBox) return;
 
-    mapEdgePaths: function (svgEl) {
-      var self = this;
-      self.edgePathEls = [];
-      
-      // Mermaid v11: edge paths are direct <path> children of <g class="edgePaths">
-      var edgePathsGroup = svgEl.querySelector('.edgePaths');
-      if (!edgePathsGroup) {
-        console.warn('[MermaidPreview] No .edgePaths group found in SVG');
-        return;
-      }
-      
-      var paths = edgePathsGroup.querySelectorAll(':scope > path');
-      console.log('[EDGE] Found', paths.length, 'edge paths in .edgePaths group');
+      var zoomScale = prevCurrent.width / prevBase.width;
+      var centerXRatio = (prevCurrent.x + prevCurrent.width / 2 - prevBase.x) / prevBase.width;
+      var centerYRatio = (prevCurrent.y + prevCurrent.height / 2 - prevBase.y) / prevBase.height;
 
-      for (var i = 0; i < paths.length; i++) {
-        // In Mermaid v11 without individual wrappers, use index-based mapping
-        if (i < self.model.edges.length) {
-          self.edgePathEls.push({
-            el: paths[i],
-            path: paths[i],
-            fromId: self.model.edges[i].from,
-            toId: self.model.edges[i].to,
-            index: i
-          });
-        } else {
-          self.edgePathEls.push(null);
-        }
+      var nextWidth = this._baseViewBox.width * zoomScale;
+      var nextHeight = this._baseViewBox.height * zoomScale;
+      var centerX = this._baseViewBox.x + this._baseViewBox.width * centerXRatio;
+      var centerY = this._baseViewBox.y + this._baseViewBox.height * centerYRatio;
+
+      this._currentViewBox = {
+        x: centerX - nextWidth / 2,
+        y: centerY - nextHeight / 2,
+        width: nextWidth,
+        height: nextHeight
+      };
+      this._applyViewBox();
+    },
+
+    _canStartPan: function (target, svgEl) {
+      if (!target || !svgEl) return false;
+      if (target.closest && (
+        target.closest('.node') ||
+        target.closest('.edgeLabel') ||
+        target.closest('.edge-toolbar') ||
+        target.closest('.sequence-toolbar') ||
+        target.closest('#conn-port-overlay') ||
+        target.closest('#edge-ghost-overlay') ||
+        target.closest('#sequence-message-hit-overlay') ||
+        target.closest('#sequence-drag-overlay')
+      )) {
+        return false;
       }
       return target === svgEl ||
         (target.tagName && target.tagName.toLowerCase() === 'svg') ||
@@ -416,110 +421,83 @@ Vue.component('mermaid-preview', {
       if (canvas) canvas.classList.remove('preview-area__canvas--panning');
     },
 
-    // ==================== EDGE HANDLERS & CONTEXT MENU (Mermaid v11) ====================
+    _zoomAtClient: function (factor, clientX, clientY) {
+      if (!this._svgEl || !this._currentViewBox || !this._baseViewBox) return;
+      var rect = this._svgEl.getBoundingClientRect();
+      if (!rect.width || !rect.height) return;
+
+      var nextWidth = this._currentViewBox.width * factor;
+      var minWidth = this._baseViewBox.width * 0.2;
+      var maxWidth = this._baseViewBox.width * 3;
+      nextWidth = Math.max(minWidth, Math.min(maxWidth, nextWidth));
+      factor = nextWidth / this._currentViewBox.width;
+
+      var nextHeight = this._currentViewBox.height * factor;
+      var px = (clientX - rect.left) / rect.width;
+      var py = (clientY - rect.top) / rect.height;
+      if (!isFinite(px) || !isFinite(py)) { px = 0.5; py = 0.5; }
+
+      this._currentViewBox.x += (this._currentViewBox.width - nextWidth) * px;
+      this._currentViewBox.y += (this._currentViewBox.height - nextHeight) * py;
+      this._currentViewBox.width = nextWidth;
+      this._currentViewBox.height = nextHeight;
+      this._applyViewBox();
+    },
 
     _buildCtx: function (svgEl) {
       var self = this;
-      
-      // Mermaid v11: edge paths are direct <path> children of <g class="edgePaths">
-      var edgePathsGroup = svgEl.querySelector('.edgePaths');
-      if (!edgePathsGroup) return;
-      
-      // Force the container to accept pointer events
-      edgePathsGroup.style.pointerEvents = 'all';
-      
-      var paths = edgePathsGroup.querySelectorAll(':scope > path');
-      
-      for (var j = 0; j < paths.length; j++) {
-        (function (path, idxData, edgeIndex) {
-          // Create invisible thick ghost path for click detection
-          var ghost = path.cloneNode(false);
-          ghost.removeAttribute('id');
-          ghost.removeAttribute('marker-end');
-          ghost.removeAttribute('marker-start');
-          ghost.setAttribute('class', 'edge-click-area');
-          ghost.setAttribute('data-edge-index', edgeIndex);
-          ghost.setAttribute('stroke', 'transparent');
-          ghost.setAttribute('stroke-width', '40');
-          ghost.setAttribute('fill', 'none');
-          ghost.style.cursor = 'pointer';
-          ghost.style.pointerEvents = 'stroke';
-          
-          // Append ghost AFTER all paths (on top in SVG z-order)
-          edgePathsGroup.appendChild(ghost);
-          
-          // Highlight effect handlers
-          ghost.addEventListener('mouseenter', function() { path.classList.add('edge-hovered'); });
-          ghost.addEventListener('mouseleave', function() { path.classList.remove('edge-hovered'); });
-          
-          // Click handler on ghost (primary)
-          ghost.addEventListener('click', function(e) { 
-             e.preventDefault(); 
-             e.stopPropagation(); 
-             if (!idxData) return;
-             
-             self.contextMenu = null;
-             self.editingNodeId = null;
-
-             var edgeIdx = idxData.index;
-             self.selectedEdgeIndex = edgeIdx;
-             self.selectedNodeId = null;
-             self.$emit('edge-selected', edgeIdx);
-             
-             self.edgeContextMenu = {
-               x: e.clientX,
-               y: e.clientY,
-               edgeIndex: edgeIdx
-             };
-          });
-          
-          // Also make the original visible path clickable as fallback
-          path.style.cursor = 'pointer';
-          path.style.pointerEvents = 'stroke';
-          path.addEventListener('click', function(e) {
-            e.preventDefault();
-            e.stopPropagation();
-            if (!idxData) return;
-            
-            self.contextMenu = null;
-            self.editingNodeId = null;
-
-            var edgeIdx = idxData.index;
-            self.selectedEdgeIndex = edgeIdx;
-            self.selectedNodeId = null;
-            self.$emit('edge-selected', edgeIdx);
-            
-            self.edgeContextMenu = {
-              x: e.clientX,
-              y: e.clientY,
-              edgeIndex: edgeIdx
-            };
-          });
-        })(paths[j], self.edgePathEls[j], j);
-      }
-      
-      // Make edge labels clickable too
-      var labels = svgEl.querySelectorAll('.edgeLabel');
-      for (var l = 0; l < labels.length; l++) {
-        (function (labelEl) {
-          labelEl.style.cursor = 'pointer';
-          labelEl.style.pointerEvents = 'all';
-          labelEl.addEventListener('click', function(e) {
-             e.preventDefault(); e.stopPropagation();
-             var txt = (labelEl.textContent || '').trim();
-             var idx = -1;
-             for(var m=0; m<self.model.edges.length; m++) {
-                if(self.model.edges[m].text && self.model.edges[m].text.trim() === txt) { idx = m; break; }
-             }
-             if (idx !== -1) {
-               self.contextMenu = null;
-               self.editingNodeId = null;
-
-               self.selectedEdgeIndex = idx;
-               self.selectedNodeId = null;
-               self.$emit('edge-selected', idx);
-               self.edgeContextMenu = { x: e.clientX, y: e.clientY, edgeIndex: idx };
-             }
+      var ctx = {
+        emit: function (ev, data) { self.$emit(ev, data); },
+        getState: function () { return self.$data; },
+        setState: function (patch) {
+          var keys = Object.keys(patch);
+          for (var i = 0; i < keys.length; i++) { self[keys[i]] = patch[keys[i]]; }
+        },
+        getModel: function () { return self.model; },
+        findNode: function (nodeId) {
+          var nodes = self.model.nodes || [];
+          for (var i = 0; i < nodes.length; i++) {
+            if (nodes[i].id === nodeId) return nodes[i];
+          }
+          return null;
+        },
+        findSequenceParticipant: function (participantId) {
+          var participants = self.model.participants || [];
+          for (var i = 0; i < participants.length; i++) {
+            if (participants[i].id === participantId) return participants[i];
+          }
+          return null;
+        },
+        findSequenceMessage: function (messageIndex) {
+          return (self.model.messages || [])[messageIndex] || null;
+        },
+        watchSelection: function (nodeId, nodeEl) {
+          self.$watch('selectedNodeId', function (val) {
+            nodeEl.classList.toggle('selected', val === nodeId);
+          }, { immediate: true });
+        },
+        watchSequenceParticipantSelection: function (participantId, el) {
+          self.$watch('selectedSequenceParticipantId', function (val) {
+            el.classList.toggle('sequence-participant-selected', val === participantId);
+          }, { immediate: true });
+        },
+        watchSequenceMessageSelection: function (messageIndex, lineEl, textEl) {
+          self.$watch('selectedSequenceMessageIndex', function (val) {
+            if (lineEl) lineEl.classList.toggle('sequence-message-selected', val === messageIndex);
+            if (textEl) textEl.classList.toggle('sequence-message-text-selected', val === messageIndex);
+          }, { immediate: true });
+        },
+        watchSequenceMessageHitSelection: function (messageIndex, hitEl) {
+          self.$watch('selectedSequenceMessageIndex', function (val) {
+            if (hitEl && hitEl.classList) {
+              hitEl.classList.toggle('sequence-hit-selected', val === messageIndex);
+            }
+          }, { immediate: true });
+        },
+        focusEditInput: function () {
+          self.$nextTick(function () {
+            var el = self.$refs.editInput;
+            if (el) { el.focus(); el.select(); }
           });
         },
         focusEdgeEditInput: function () {
