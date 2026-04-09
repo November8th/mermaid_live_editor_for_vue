@@ -92,6 +92,27 @@ body {
   flex-direction: column;
 }
 
+.live-editor-shell {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 100vh;
+  overflow: hidden;
+}
+
+mermaid-editor,
+mermaid-preview {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+}
+
+mermaid-toolbar {
+  display: block;
+  flex: 0 0 auto;
+}
+
 /* ============================================
    앱 헤더 (다크 네이비)
    ============================================ */
@@ -217,8 +238,15 @@ body {
 .editor-container {
   display: flex;
   flex: 1;
+  min-height: 0;
+  height: calc(100vh - 52px);
   overflow: hidden;
   position: relative;
+  gap: 18px;
+  padding: 18px;
+  background:
+    radial-gradient(circle at top left, rgba(21, 101, 192, 0.08), transparent 34%),
+    linear-gradient(180deg, #f7f9fd 0%, #eef3f9 100%);
 }
 
 /* ============================================
@@ -228,18 +256,23 @@ body {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  min-width: 0;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-xl);
+  background: var(--bg-surface);
+  box-shadow: var(--shadow-md);
 }
 
 .panel--editor {
-  width: 38%;
-  min-width: 280px;
+  flex: 1 1 50%;
+  min-height: 620px;
   background: var(--bg-editor);
-  border-right: 1px solid rgba(0, 0, 0, 0.3);
 }
 
 .panel--preview {
-  flex: 1;
-  background: var(--bg-main);
+  flex: 1 1 50%;
+  min-height: 620px;
+  background: var(--bg-surface);
   position: relative;
   display: flex;
   flex-direction: column;
@@ -249,9 +282,9 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 16px;
-  height: 40px;
-  background: var(--bg-editor-panel);
+  padding: 12px 16px;
+  min-height: 54px;
+  background: #fbfcfe;
   border-bottom: 1px solid var(--border-dark);
   flex-shrink: 0;
 }
@@ -274,6 +307,50 @@ body {
   background: var(--success);
   box-shadow: 0 0 6px rgba(22, 163, 74, 0.6);
   animation: pulse 2.5s ease-in-out infinite;
+}
+
+.panel__header--tabs {
+  gap: 16px;
+}
+
+.panel__meta {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.view-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px;
+  border-radius: 999px;
+  background: var(--bg-editor-panel);
+}
+
+.view-toggle__btn {
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 7px 14px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.view-toggle__btn:hover {
+  color: var(--text-primary);
+  background: rgba(21, 101, 192, 0.08);
+}
+
+.view-toggle__btn--active {
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-sm);
 }
 
 @keyframes pulse {
@@ -349,31 +426,99 @@ body {
   flex-shrink: 0;
 }
 
+.editor-guide {
+  flex: 1;
+  padding: 28px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  overflow: auto;
+  background: linear-gradient(180deg, #ffffff 0%, #f7f9fd 100%);
+}
+
+.editor-guide__eyebrow {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--accent-blue);
+}
+
+.editor-guide__title {
+  font-size: 22px;
+  line-height: 1.2;
+  color: var(--text-primary);
+}
+
+.editor-guide__body {
+  font-size: 13.5px;
+  color: var(--text-secondary);
+  max-width: 42ch;
+}
+
+.editor-guide__snippet {
+  margin-top: 4px;
+  padding: 18px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-light);
+  background: #f3f6fb;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 1.7;
+  overflow: auto;
+}
+
 /* ============================================
    툴바 (라이트)
    ============================================ */
 .toolbar {
   display: flex;
-  align-items: center;
-  padding: 6px 14px;
-  gap: 4px;
+  flex-direction: column;
+  padding: 14px 16px 12px;
+  gap: 12px;
   background: var(--bg-surface);
   border-bottom: 1px solid var(--border-light);
   flex-shrink: 0;
-  flex-wrap: wrap;
 }
 
 .toolbar__group {
   display: flex;
   align-items: center;
+  gap: 8px;
+}
+
+.toolbar__main,
+.toolbar__sub {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.toolbar__title-block {
+  display: flex;
+  flex-direction: column;
   gap: 2px;
 }
 
-.toolbar__separator {
-  width: 1px;
-  height: 20px;
-  background: var(--border-light);
-  margin: 0 8px;
+.toolbar__eyebrow {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.toolbar__title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.toolbar__group--zoom {
+  justify-content: flex-end;
 }
 
 .toolbar__btn {
@@ -393,6 +538,31 @@ body {
   transition: all var(--transition-fast);
   white-space: nowrap;
   height: 30px;
+}
+
+.toolbar__icon-btn {
+  height: 32px;
+  min-width: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--border-light);
+  border-radius: 999px;
+  background: #f6f8fc;
+  color: var(--text-secondary);
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.toolbar__icon-btn:hover {
+  background: var(--bg-light-hover);
+  color: var(--text-primary);
+  border-color: #b8c4dc;
+}
+
+.toolbar__icon-btn--wide {
+  min-width: 54px;
 }
 
 .toolbar__btn:hover {
@@ -469,30 +639,39 @@ body {
    ============================================ */
 .preview-area {
   flex: 1;
-  overflow: auto;
+  overflow: hidden;
   position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 20px;
-  background: var(--bg-main);
+  min-height: 0;
+  padding: 16px;
+  background:
+    linear-gradient(180deg, rgba(245, 248, 252, 0.92), rgba(237, 242, 249, 0.92)),
+    repeating-linear-gradient(
+      0deg,
+      rgba(27, 42, 74, 0.028) 0,
+      rgba(27, 42, 74, 0.028) 1px,
+      transparent 1px,
+      transparent 28px
+    ),
+    repeating-linear-gradient(
+      90deg,
+      rgba(27, 42, 74, 0.028) 0,
+      rgba(27, 42, 74, 0.028) 1px,
+      transparent 1px,
+      transparent 28px
+    );
 }
 
 .preview-area__canvas {
-  background: var(--bg-surface);
+  position: absolute;
+  inset: 16px;
+  background: #ffffff;
   border-radius: var(--radius-lg);
   border: 1px solid var(--border-light);
-  min-width: 300px;
-  min-height: 200px;
-  width: 100%;
-  height: 100%;
-  padding: 0;
+  min-width: 0;
+  min-height: 0;
   box-shadow: var(--shadow-md);
-  position: relative;
   overflow: hidden;
-  display: flex;
-  align-items: stretch;
-  justify-content: stretch;
+  display: block;
   transition: box-shadow var(--transition-normal);
 }
 
@@ -505,12 +684,17 @@ body {
 }
 
 .preview-area__canvas svg {
-  width: 100%;
-  height: 100%;
   display: block;
+  position: absolute;
+  top: 0;
+  left: 0;
+  will-change: transform;
+  /* CSS transform이 위치/크기를 관리. absolute로 레이아웃 흐름에서 분리 */
 }
 
 .preview-area__empty {
+  position: absolute;
+  inset: 16px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -519,6 +703,9 @@ body {
   color: var(--text-muted);
   padding: 40px;
   text-align: center;
+  border: 1px dashed rgba(21, 101, 192, 0.24);
+  border-radius: var(--radius-lg);
+  background: rgba(255, 255, 255, 0.78);
 }
 
 .preview-area__empty-icon {
@@ -1058,4 +1245,22 @@ body {
 /* Mermaid SVG 폰트 오버라이드 */
 .preview-area__canvas .mermaid-output .label {
   font-family: var(--font-sans) !important;
+}
+
+@media (max-width: 1080px) {
+  .editor-container {
+    flex-direction: column;
+  }
+
+  .panel--editor,
+  .panel--preview {
+    flex: 1 1 auto;
+    min-height: 320px;
+  }
+
+  .panel__header--tabs,
+  .toolbar__main,
+  .toolbar__sub {
+    align-items: flex-start;
+  }
 }

@@ -85,6 +85,15 @@ Vue.component('mermaid-preview', {
     this.renderDiagram();
     var self = this;
 
+    this._windowResizeHandler = function () {
+      if (!self._svgEl) return;
+      if (self._resizeFrame) cancelAnimationFrame(self._resizeFrame);
+      self._resizeFrame = requestAnimationFrame(function () {
+        self.fitView();
+      });
+    };
+    window.addEventListener('resize', this._windowResizeHandler);
+
     // 전역 클릭 시 컨텍스트 메뉴와 엣지 툴바 닫기
     document.addEventListener('click', function () {
       self.contextMenu = null;
@@ -144,6 +153,14 @@ Vue.component('mermaid-preview', {
   },
 
   beforeDestroy: function () {
+    if (this._windowResizeHandler) {
+      window.removeEventListener('resize', this._windowResizeHandler);
+      this._windowResizeHandler = null;
+    }
+    if (this._resizeFrame) {
+      cancelAnimationFrame(this._resizeFrame);
+      this._resizeFrame = null;
+    }
     if (this._panMouseUpHandler) {
       document.removeEventListener('mouseup', this._panMouseUpHandler);
       this._panMouseUpHandler = null;
@@ -282,6 +299,32 @@ Vue.component('mermaid-preview', {
         'translate(' + this.panX + 'px, ' + this.panY + 'px) scale(' + this.cfgZoom + ')';
     },
 
+    _getContentBounds: function () {
+      if (!this._svgEl) return null;
+
+      var vb = this._svgEl.viewBox && this._svgEl.viewBox.baseVal;
+      var fallback = {
+        x: 0,
+        y: 0,
+        width: (vb && vb.width) || 0,
+        height: (vb && vb.height) || 0
+      };
+
+      try {
+        var box = this._svgEl.getBBox();
+        if (box && box.width && box.height) {
+          return {
+            x: box.x,
+            y: box.y,
+            width: box.width,
+            height: box.height
+          };
+        }
+      } catch (e) {}
+
+      return (fallback.width && fallback.height) ? fallback : null;
+    },
+
     _setupViewport: function (svgEl, canvas, forcefit) {
       var prevZoom = this.cfgZoom;
       var prevPanX = this.panX;
@@ -290,6 +333,20 @@ Vue.component('mermaid-preview', {
 
       this._svgEl = svgEl;
       svgEl.style.overflow = 'visible';
+      svgEl.style.display = 'block';
+      svgEl.style.position = 'absolute';
+      svgEl.style.top = '0';
+      svgEl.style.left = '0';
+      svgEl.style.maxWidth = 'none';
+      svgEl.style.maxHeight = 'none';
+
+      var vb = svgEl.viewBox && svgEl.viewBox.baseVal;
+      var bounds = this._getContentBounds();
+      var intrinsicWidth = (vb && vb.width) || (bounds && bounds.width) || 1;
+      var intrinsicHeight = (vb && vb.height) || (bounds && bounds.height) || 1;
+
+      svgEl.style.width = intrinsicWidth + 'px';
+      svgEl.style.height = intrinsicHeight + 'px';
 
       var self = this;
 
@@ -736,22 +793,18 @@ Vue.component('mermaid-preview', {
         return;
       }
 
-      // SVG 논리적 크기: viewBox 우선, 없으면 getBBox() (실제 컨텐츠 바운딩박스)
-      var vb   = this._svgEl.viewBox && this._svgEl.viewBox.baseVal;
-      var svgW = (vb && vb.width)  ? vb.width  : this._svgEl.getBBox().width;
-      var svgH = (vb && vb.height) ? vb.height : this._svgEl.getBBox().height;
+      var bounds = this._getContentBounds();
+      if (!bounds || !bounds.width || !bounds.height) return;
 
-      if (!svgW || !svgH) return;
-
-      var pad    = 20;
-      var scaleX = (canvasW - pad * 2) / svgW;
-      var scaleY = (canvasH - pad * 2) / svgH;
-      var scale  = Math.min(scaleX, scaleY);   // 비율 유지하면서 전체가 보이게
+      var pad    = Math.max(24, Math.min(canvasW, canvasH) * 0.06);
+      var scaleX = (canvasW - pad * 2) / bounds.width;
+      var scaleY = (canvasH - pad * 2) / bounds.height;
+      var scale  = Math.min(scaleX, scaleY);
       scale = Math.max(0.1, Math.min(5.0, scale));
 
       this.cfgZoom = scale;
-      this.panX    = (canvasW - svgW * scale) / 2;
-      this.panY    = (canvasH - svgH * scale) / 2;
+      this.panX    = (canvasW - bounds.width * scale) / 2 - bounds.x * scale;
+      this.panY    = (canvasH - bounds.height * scale) / 2 - bounds.y * scale;
       this._applyTransform();
     },
 

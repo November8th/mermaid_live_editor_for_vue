@@ -12,7 +12,8 @@ Vue.component('mermaid-editor', {
   data: function () {
     return {
       localValue: this.value,
-      debounceTimer: null
+      debounceTimer: null,
+      activeTab: 'code'
     };
   },
   watch: {
@@ -38,6 +39,25 @@ Vue.component('mermaid-editor', {
     },
     statusText: function () {
       return this.diagramType === 'sequenceDiagram' ? 'Mermaid Sequence Diagram' : 'Mermaid Flowchart';
+    },
+    guideTitle: function () {
+      return this.diagramType === 'sequenceDiagram' ? 'Sequence Diagram Quick Guide' : 'Flowchart Quick Guide';
+    },
+    guideLines: function () {
+      if (this.diagramType === 'sequenceDiagram') {
+        return [
+          'participant Alice',
+          'participant Bob',
+          'Alice->>Bob: Request',
+          'Bob-->>Alice: Response'
+        ];
+      }
+      return [
+        'flowchart TD',
+        'A[Start] --> B{Decision}',
+        'B -->|Yes| C[Process]',
+        'B -->|No| D[End]'
+      ];
     }
   },
   methods: {
@@ -72,13 +92,24 @@ Vue.component('mermaid-editor', {
   },
   template: '\
     <div class="panel panel--editor">\
-      <div class="panel__header">\
-        <span class="panel__title">\
-          <span class="panel__title-dot"></span>\
-          Script Editor\
-        </span>\
+      <div class="panel__header panel__header--tabs">\
+        <div class="view-toggle">\
+          <button\
+            type="button"\
+            class="view-toggle__btn"\
+            :class="{ \'view-toggle__btn--active\': activeTab === \'code\' }"\
+            @click="activeTab = \'code\'"\
+          >Mermaid Code</button>\
+          <button\
+            type="button"\
+            class="view-toggle__btn"\
+            :class="{ \'view-toggle__btn--active\': activeTab === \'guide\' }"\
+            @click="activeTab = \'guide\'"\
+          >Quick Guide</button>\
+        </div>\
+        <span class="panel__meta">{{ statusText }}</span>\
       </div>\
-      <div class="code-editor">\
+      <div v-if="activeTab === \'code\'" class="code-editor">\
         <textarea\
           class="code-editor__textarea"\
           :value="localValue"\
@@ -94,6 +125,12 @@ Vue.component('mermaid-editor', {
           <span>Lines: {{ lineCount }} | Chars: {{ charCount }}</span>\
           <span>{{ statusText }}</span>\
         </div>\
+      </div>\
+      <div v-else class="editor-guide">\
+        <div class="editor-guide__eyebrow">Reference</div>\
+        <h3 class="editor-guide__title">{{ guideTitle }}</h3>\
+        <p class="editor-guide__body">Use the left editor for raw Mermaid, then adjust nodes directly in the preview. Fit View will re-center the diagram to the visible frame.</p>\
+        <pre class="editor-guide__snippet"><code>{{ guideLines.join(\'\\n\') }}</code></pre>\
       </div>\
     </div>\
   '

@@ -75,6 +75,10 @@ Vue.component('mermaid-live-editor', {
 
   methods: {
 
+    _schedulePreviewFit: function () {
+      if (this.$refs.preview) this.$refs.preview.scheduleFit();
+    },
+
     _normalizeSequenceMessages: function (messages) {
       var result = [];
       var activeCounts = {};
@@ -138,6 +142,7 @@ Vue.component('mermaid-live-editor', {
       }
       this.syncSource = null;
       this.script = newScript;
+      this._schedulePreviewFit();
       this.parseScript();
     },
 
@@ -199,7 +204,7 @@ Vue.component('mermaid-live-editor', {
       nodes.push(newNode);
       this.model = Object.assign({}, this.model, { nodes: nodes });
       this.updateScriptFromModel();
-      if (this.$refs.preview) this.$refs.preview.scheduleFit();
+      this._schedulePreviewFit();
     },
 
     addEdge: function (data) {
@@ -209,6 +214,7 @@ Vue.component('mermaid-live-editor', {
       edges.push({ from: data.from, to: data.to, text: '', type: '-->' });
       this.model = Object.assign({}, this.model, { edges: edges });
       this.updateScriptFromModel();
+      this._schedulePreviewFit();
     },
 
     addSequenceParticipant: function () {
@@ -219,6 +225,7 @@ Vue.component('mermaid-live-editor', {
       var participants = (this.model.participants || []).slice();
       participants.push({ id: id, label: 'Participant ' + this.participantCounter });
       this._updateSequenceModel({ participants: participants });
+      this._schedulePreviewFit();
     },
 
     addSequenceMessage: function (payload) {
@@ -261,6 +268,7 @@ Vue.component('mermaid-live-editor', {
       });
 
       this._updateSequenceModel({ messages: messages });
+      this._schedulePreviewFit();
     },
 
     deleteSelected: function (data) {
@@ -341,6 +349,7 @@ Vue.component('mermaid-live-editor', {
       this._snapshot();
       this.model = Object.assign({}, this.model, { direction: dir });
       this.updateScriptFromModel();
+      this._schedulePreviewFit();
     },
 
     updateSequenceParticipantText: function (data) {
@@ -515,7 +524,7 @@ Vue.component('mermaid-live-editor', {
   },
 
   template: '\
-    <div style="display: flex; flex-direction: column; flex: 1; overflow: hidden;">\
+    <div class="live-editor-shell">\
       <div class="app-header">\
         <div class="app-header__left">\
           <div class="app-header__logo">\
@@ -536,13 +545,7 @@ Vue.component('mermaid-live-editor', {
           :error="error"\
           :diagram-type="model.type"\
           @input="onScriptChange"\
-          :style="{ width: editorWidth + \'%\' }"\
         ></mermaid-editor>\
-        <div\
-          class="resize-handle"\
-          :class="{ active: resizing }"\
-          @mousedown="startResize"\
-        ></div>\
         <div class="panel panel--preview">\
           <!-- 상단 toolbar는 preview 네비게이션과 편집 액션을 묶는다. -->\
           <mermaid-toolbar\
