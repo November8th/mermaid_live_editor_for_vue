@@ -294,9 +294,12 @@ Vue.component('mermaid-preview', {
 
     _applyTransform: function () {
       if (!this._svgEl) return;
+      var snappedPanX = Math.round(this.panX);
+      var snappedPanY = Math.round(this.panY);
+      var snappedZoom = Math.round(this.cfgZoom * 1000) / 1000;
       this._svgEl.style.transformOrigin = '0 0';
       this._svgEl.style.transform =
-        'translate(' + this.panX + 'px, ' + this.panY + 'px) scale(' + this.cfgZoom + ')';
+        'translate(' + snappedPanX + 'px, ' + snappedPanY + 'px) scale(' + snappedZoom + ')';
     },
 
     _getContentBounds: function () {
@@ -339,6 +342,9 @@ Vue.component('mermaid-preview', {
       svgEl.style.left = '0';
       svgEl.style.maxWidth = 'none';
       svgEl.style.maxHeight = 'none';
+      svgEl.style.backfaceVisibility = 'hidden';
+      svgEl.style.webkitFontSmoothing = 'antialiased';
+      svgEl.setAttribute('text-rendering', 'geometricPrecision');
 
       var vb = svgEl.viewBox && svgEl.viewBox.baseVal;
       var bounds = this._getContentBounds();

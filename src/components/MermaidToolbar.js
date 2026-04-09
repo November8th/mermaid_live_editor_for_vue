@@ -37,12 +37,6 @@ Vue.component('mermaid-toolbar', {
           <div class="toolbar__eyebrow">Viewport</div>\
           <div class="toolbar__title">{{ titleText }}</div>\
         </div>\
-        <div class="toolbar__group toolbar__group--zoom">\
-          <button class="toolbar__icon-btn" @click="zoomOut" title="Zoom Out">-</button>\
-          <button class="toolbar__icon-btn" @click="zoomIn" title="Zoom In">+</button>\
-          <button class="toolbar__icon-btn toolbar__icon-btn--wide" @click="fitView" title="Fit to View">Fit</button>\
-          <button class="toolbar__icon-btn toolbar__icon-btn--wide" @click="copySvg" title="Copy SVG">Copy</button>\
-        </div>\
       </div>\
       <div class="toolbar__sub">\
         <div class="toolbar__group">\
@@ -59,6 +53,12 @@ Vue.component('mermaid-toolbar', {
         <div class="toolbar__group">\
           <button class="toolbar__btn" @click="undo" :disabled="!canUndo" title="Undo (Ctrl+Z)">Undo</button>\
           <button class="toolbar__btn" @click="redo" :disabled="!canRedo" title="Redo (Ctrl+Y)">Redo</button>\
+        </div>\
+        <div class="toolbar__group toolbar__group--zoom">\
+          <button class="toolbar__icon-btn" @click="zoomOut" title="Zoom Out">-</button>\
+          <button class="toolbar__icon-btn" @click="zoomIn" title="Zoom In">+</button>\
+          <button class="toolbar__icon-btn toolbar__icon-btn--wide" @click="fitView" title="Fit to View">Fit</button>\
+          <button class="toolbar__icon-btn toolbar__icon-btn--wide" @click="copySvg" title="Copy SVG">Copy</button>\
         </div>\
         <div v-if="isFlowchart" class="toolbar__group">\
           <select class="toolbar__select" :value="direction" @change="changeDirection" title="Layout direction">\

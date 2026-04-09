@@ -309,48 +309,11 @@ mermaid-toolbar {
   animation: pulse 2.5s ease-in-out infinite;
 }
 
-.panel__header--tabs {
-  gap: 16px;
-}
-
 .panel__meta {
   font-size: 12px;
   font-weight: 600;
   color: var(--text-muted);
   white-space: nowrap;
-}
-
-.view-toggle {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px;
-  border-radius: 999px;
-  background: var(--bg-editor-panel);
-}
-
-.view-toggle__btn {
-  border: none;
-  background: transparent;
-  color: var(--text-muted);
-  font-family: var(--font-sans);
-  font-size: 13px;
-  font-weight: 600;
-  padding: 7px 14px;
-  border-radius: 999px;
-  cursor: pointer;
-  transition: background var(--transition-fast), color var(--transition-fast), box-shadow var(--transition-fast);
-}
-
-.view-toggle__btn:hover {
-  color: var(--text-primary);
-  background: rgba(21, 101, 192, 0.08);
-}
-
-.view-toggle__btn--active {
-  background: var(--bg-surface);
-  color: var(--text-primary);
-  box-shadow: var(--shadow-sm);
 }
 
 @keyframes pulse {
@@ -426,48 +389,6 @@ mermaid-toolbar {
   flex-shrink: 0;
 }
 
-.editor-guide {
-  flex: 1;
-  padding: 28px 24px;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  overflow: auto;
-  background: linear-gradient(180deg, #ffffff 0%, #f7f9fd 100%);
-}
-
-.editor-guide__eyebrow {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--accent-blue);
-}
-
-.editor-guide__title {
-  font-size: 22px;
-  line-height: 1.2;
-  color: var(--text-primary);
-}
-
-.editor-guide__body {
-  font-size: 13.5px;
-  color: var(--text-secondary);
-  max-width: 42ch;
-}
-
-.editor-guide__snippet {
-  margin-top: 4px;
-  padding: 18px;
-  border-radius: var(--radius-lg);
-  border: 1px solid var(--border-light);
-  background: #f3f6fb;
-  color: var(--text-primary);
-  font-family: var(--font-mono);
-  font-size: 12.5px;
-  line-height: 1.7;
-  overflow: auto;
-}
 
 /* ============================================
    툴바 (라이트)
@@ -518,6 +439,7 @@ mermaid-toolbar {
 }
 
 .toolbar__group--zoom {
+  margin-left: auto;
   justify-content: flex-end;
 }
 
@@ -690,6 +612,12 @@ mermaid-toolbar {
   left: 0;
   will-change: transform;
   /* CSS transform이 위치/크기를 관리. absolute로 레이아웃 흐름에서 분리 */
+}
+
+.preview-area__canvas svg text,
+.preview-area__canvas svg tspan {
+  text-rendering: geometricPrecision;
+  paint-order: stroke fill;
 }
 
 .preview-area__empty {
@@ -1258,7 +1186,7 @@ mermaid-toolbar {
     min-height: 320px;
   }
 
-  .panel__header--tabs,
+  .panel__header,
   .toolbar__main,
   .toolbar__sub {
     align-items: flex-start;
