@@ -1147,7 +1147,7 @@ Vue.component('mermaid-preview', {
           <div class="context-menu__item context-menu__item--danger" @click="contextDeleteNode"><span class="context-menu__item-icon">X</span> Delete Node</div>\
         </div>\
         <div v-if="edgeToolbar" class="edge-toolbar" :style="{ left: edgeToolbar.x + &quot;px&quot;, top: edgeToolbar.y + &quot;px&quot; }" @click.stop>\
-          <button class="edge-toolbar__btn" @click="edgeToolbarEdit" title="Edit label">Label</button>\
+          <button class="edge-toolbar__btn" @click="edgeToolbarEdit" title="Edit label">Label ✎</button>\
           <div class="edge-toolbar__palette">\
             <button class="context-menu__color-btn context-menu__color-btn--clear" title="default" @click="edgeToolbarChangeColor(&quot;&quot;)">x</button>\
             <button v-for="color in $options.COLOR_PALETTE" :key="color.key" class="context-menu__color-btn" :style="{ backgroundColor: color.value }" :title="color.key" @click="edgeToolbarChangeColor(color.value)"></button>\

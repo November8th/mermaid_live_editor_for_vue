@@ -220,10 +220,16 @@ Vue.component('mermaid-live-editor', {
 
     addEdge: function (data) {
       if (!this.isFlowchart) return;
+      var edges = this.model.edges;
+      if (data.from === data.to) {
+        for (var i = 0; i < edges.length; i++) {
+          if (edges[i].from === data.from && edges[i].to === data.to) return;
+        }
+      }
       this._snapshot();
-      var edges = this.model.edges.slice();
-      edges.push({ from: data.from, to: data.to, text: '', type: '-->' });
-      this.model = Object.assign({}, this.model, { edges: edges });
+      var newEdges = edges.slice();
+      newEdges.push({ from: data.from, to: data.to, text: '', type: '-->' });
+      this.model = Object.assign({}, this.model, { edges: newEdges });
       this.updateScriptFromModel();
     },
 
