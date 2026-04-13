@@ -1011,6 +1011,12 @@ Vue.component('mermaid-preview', {
       this.sequenceToolbar = null;
     },
 
+    sequenceToolbarToggleKind: function () {
+      if (!this.sequenceToolbar || this.sequenceToolbar.type !== 'participant') return;
+      this.$emit('toggle-participant-kind', { participantId: this.sequenceToolbar.id });
+      this.sequenceToolbar = null;
+    },
+
     // postRenderSetup 바깥에서도 재사용하는 경량 ctx
     _buildCtxLite: function () {
       var self = this;
@@ -1157,6 +1163,7 @@ Vue.component('mermaid-preview', {
         </div>\
         <div v-if="sequenceToolbar" class="sequence-toolbar" :style="{ left: sequenceToolbar.x + &quot;px&quot;, top: sequenceToolbar.y + &quot;px&quot; }" @click.stop>\
           <button class="edge-toolbar__btn" @click="sequenceToolbarEdit">Edit</button>\
+          <button v-if="sequenceToolbar.type === &quot;participant&quot;" class="edge-toolbar__btn" @click="sequenceToolbarToggleKind">{{ sequenceToolbar.kind === &quot;actor&quot; ? &quot;→ Participant&quot; : &quot;→ Actor&quot; }}</button>\
           <button v-if="sequenceToolbar.type === &quot;message&quot;" class="edge-toolbar__btn" @click="sequenceToolbarReverse">Reverse</button>\
           <button v-if="sequenceToolbar.type === &quot;message&quot;" class="edge-toolbar__btn" @click="sequenceToolbarToggleLineType">Line</button>\
           <button class="edge-toolbar__btn edge-toolbar__btn--danger" @click="sequenceToolbarDelete">Delete</button>\

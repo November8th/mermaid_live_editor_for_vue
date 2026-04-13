@@ -51,6 +51,7 @@ Vue.component('mermaid-toolbar', {
       });
     },
     addSequenceParticipant: function () { this.$emit('add-sequence-participant'); },
+    addSequenceActor: function () { this.$emit('add-sequence-actor'); },
     addSequenceMessage: function () { this.$emit('add-sequence-message'); },
     undo: function () { this.$emit('undo'); },
     redo: function () { this.$emit('redo'); },
@@ -129,6 +130,9 @@ Vue.component('mermaid-toolbar', {
           </div>\
           <button v-else class="toolbar__btn toolbar__btn--active" @click="addSequenceParticipant" title="Add participant">\
             <span class="toolbar__btn-icon">+</span> Participant\
+          </button>\
+          <button v-if="!isFlowchart" class="toolbar__btn" @click="addSequenceActor" title="Add actor">\
+            <span class="toolbar__btn-icon">+</span> Actor\
           </button>\
           <button v-if="!isFlowchart" class="toolbar__btn" @click="addSequenceMessage" title="Add message">\
             <span class="toolbar__btn-icon">+</span> Message\

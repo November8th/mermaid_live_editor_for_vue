@@ -35,10 +35,11 @@
       for (var i = 0; i < participants.length; i++) {
         var participant = participants[i];
         if (!participant || !participant.id) continue;
+        var keyword = participant.kind === 'actor' ? 'actor' : 'participant';
         if (participant.label && participant.label !== participant.id) {
-          lines.push('    participant ' + participant.id + ' as ' + participant.label);
+          lines.push('    ' + keyword + ' ' + participant.id + ' as ' + participant.label);
         } else {
-          lines.push('    participant ' + participant.id);
+          lines.push('    ' + keyword + ' ' + participant.id);
         }
       }
     }

@@ -44,6 +44,7 @@
           sequenceToolbar: {
             type: 'participant',
             id: data.id,
+            kind: data.kind || 'participant',
             x: e.clientX,
             y: e.clientY
           }

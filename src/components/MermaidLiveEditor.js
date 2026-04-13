@@ -239,9 +239,30 @@ Vue.component('mermaid-live-editor', {
       this.participantCounter++;
       var id = 'P' + this.participantCounter;
       var participants = (this.model.participants || []).slice();
-      participants.push({ id: id, label: 'Participant ' + this.participantCounter });
+      participants.push({ id: id, label: 'Participant ' + this.participantCounter, kind: 'participant' });
       this._updateSequenceModel({ participants: participants });
       this._schedulePreviewFit();
+    },
+
+    addSequenceActor: function () {
+      if (this.isFlowchart) return;
+      this._snapshot();
+      this.participantCounter++;
+      var id = 'P' + this.participantCounter;
+      var participants = (this.model.participants || []).slice();
+      participants.push({ id: id, label: 'Actor ' + this.participantCounter, kind: 'actor' });
+      this._updateSequenceModel({ participants: participants });
+      this._schedulePreviewFit();
+    },
+
+    toggleParticipantKind: function (data) {
+      if (this.isFlowchart) return;
+      this._snapshot();
+      var participants = (this.model.participants || []).map(function (p) {
+        if (p.id !== data.participantId) return p;
+        return Object.assign({}, p, { kind: p.kind === 'actor' ? 'participant' : 'actor' });
+      });
+      this._updateSequenceModel({ participants: participants });
     },
 
     addSequenceMessage: function (payload) {
@@ -621,6 +642,7 @@ Vue.component('mermaid-live-editor', {
             :can-redo="canRedo"\
             @add-node="addNode"\
             @add-sequence-participant="addSequenceParticipant"\
+            @add-sequence-actor="addSequenceActor"\
             @add-sequence-message="addSequenceMessage"\
             @undo="undo"\
             @redo="redo"\
@@ -648,6 +670,7 @@ Vue.component('mermaid-live-editor', {
             @update-sequence-message-text="updateSequenceMessageText"\
             @reverse-sequence-message="reverseSequenceMessage"\
             @toggle-sequence-message-line-type="toggleSequenceMessageLineType"\
+            @toggle-participant-kind="toggleParticipantKind"\
             @node-selected="onNodeSelected"\
             @edge-selected="onEdgeSelected"\
             @sequence-participant-selected="onSequenceParticipantSelected"\

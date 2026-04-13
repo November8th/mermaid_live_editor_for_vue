@@ -10,7 +10,7 @@
 
   function ensureParticipant(model, id, label) {
     if (!id || model._participantMap[id]) return;
-    var participant = { id: id, label: label || id };
+    var participant = { id: id, label: label || id, kind: 'participant' };
     model.participants.push(participant);
     model._participantMap[id] = participant;
   }
@@ -19,7 +19,17 @@
     var match = line.match(/^(participant|actor)\s+([A-Za-z0-9_\u3131-\uD79D]+)(?:\s+as\s+(.+))?$/);
     if (!match) return false;
     model.explicitParticipants = true;
-    ensureParticipant(model, match[2], match[3] ? match[3].trim() : match[2]);
+    var id = match[2];
+    var label = match[3] ? match[3].trim() : id;
+    var kind = match[1]; // 'participant' | 'actor'
+    if (!model._participantMap[id]) {
+      var p = { id: id, label: label, kind: kind };
+      model.participants.push(p);
+      model._participantMap[id] = p;
+    } else {
+      model._participantMap[id].kind = kind;
+      if (match[3]) model._participantMap[id].label = label;
+    }
     return true;
   }
 
