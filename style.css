@@ -1469,19 +1469,19 @@ mermaid-toolbar {
 }
 
 .sequence-target-line {
-  stroke: #1565c0;
-  stroke-width: 6px;
+  stroke: #2563eb;
+  stroke-width: 4px;
   stroke-linecap: round;
-  opacity: 0.3;
-  filter: drop-shadow(0 0 8px rgba(21, 101, 192, 0.4));
+  opacity: 1;
+  filter: drop-shadow(0 0 6px rgba(37, 99, 235, 0.7));
 }
 
 .preview-area__canvas .sequence-participant-drag-target rect,
 .preview-area__canvas .sequence-participant-drag-target polygon,
 .preview-area__canvas .sequence-participant-drag-target path {
-  stroke: #1565c0 !important;
-  stroke-width: 2.5px !important;
-  filter: drop-shadow(0 0 8px rgba(21, 101, 192, 0.3));
+  stroke: #2563eb !important;
+  stroke-width: 3px !important;
+  filter: drop-shadow(0 0 10px rgba(37, 99, 235, 0.6));
 }
 
 /* 포트 드래그 스냅 타깃 */

@@ -241,7 +241,6 @@ Vue.component('mermaid-live-editor', {
       var participants = (this.model.participants || []).slice();
       participants.push({ id: id, label: 'Participant ' + this.participantCounter, kind: 'participant' });
       this._updateSequenceModel({ participants: participants });
-      this._schedulePreviewFit();
     },
 
     addSequenceActor: function () {
@@ -252,7 +251,6 @@ Vue.component('mermaid-live-editor', {
       var participants = (this.model.participants || []).slice();
       participants.push({ id: id, label: 'Actor ' + this.participantCounter, kind: 'actor' });
       this._updateSequenceModel({ participants: participants });
-      this._schedulePreviewFit();
     },
 
     toggleParticipantKind: function (data) {
@@ -305,7 +303,6 @@ Vue.component('mermaid-live-editor', {
       });
 
       this._updateSequenceModel({ messages: messages });
-      this._schedulePreviewFit();
     },
 
     deleteSelected: function (data) {
