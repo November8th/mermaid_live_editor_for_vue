@@ -1037,6 +1037,18 @@ Vue.component('mermaid-preview', {
       this.sequenceToolbar = null;
     },
 
+    sequenceToolbarMoveLeft: function () {
+      if (!this.sequenceToolbar || this.sequenceToolbar.type !== 'participant') return;
+      this.$emit('move-sequence-participant', { participantId: this.sequenceToolbar.id, direction: 'left' });
+      this.sequenceToolbar = null;
+    },
+
+    sequenceToolbarMoveRight: function () {
+      if (!this.sequenceToolbar || this.sequenceToolbar.type !== 'participant') return;
+      this.$emit('move-sequence-participant', { participantId: this.sequenceToolbar.id, direction: 'right' });
+      this.sequenceToolbar = null;
+    },
+
     // postRenderSetup 바깥에서도 재사용하는 경량 ctx
     _buildCtxLite: function () {
       var self = this;
@@ -1194,6 +1206,8 @@ Vue.component('mermaid-preview', {
           </template>\
           <template v-else>\
             <button class="edge-toolbar__btn" @click="sequenceToolbarEdit">Edit</button>\
+            <button v-if="sequenceToolbar.type === &quot;participant&quot;" class="edge-toolbar__btn" @click="sequenceToolbarMoveLeft" title="Move left">◀</button>\
+            <button v-if="sequenceToolbar.type === &quot;participant&quot;" class="edge-toolbar__btn" @click="sequenceToolbarMoveRight" title="Move right">▶</button>\
             <button v-if="sequenceToolbar.type === &quot;participant&quot;" class="edge-toolbar__btn" @click="sequenceToolbarToggleKind">{{ sequenceToolbar.kind === &quot;actor&quot; ? &quot;→ Participant&quot; : &quot;→ Actor&quot; }}</button>\
             <button v-if="sequenceToolbar.type === &quot;message&quot;" class="edge-toolbar__btn" @click="sequenceToolbarReverse">Reverse</button>\
             <button v-if="sequenceToolbar.type === &quot;message&quot;" class="edge-toolbar__btn" @click.stop="sequenceToolbarToggleLineType">Line</button>\

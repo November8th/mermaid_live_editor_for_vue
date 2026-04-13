@@ -263,6 +263,23 @@ Vue.component('mermaid-live-editor', {
       this._updateSequenceModel({ participants: participants });
     },
 
+    moveSequenceParticipant: function (data) {
+      if (this.isFlowchart) return;
+      var participants = (this.model.participants || []).slice();
+      var idx = -1;
+      for (var i = 0; i < participants.length; i++) {
+        if (participants[i].id === data.participantId) { idx = i; break; }
+      }
+      if (idx === -1) return;
+      var swapIdx = data.direction === 'left' ? idx - 1 : idx + 1;
+      if (swapIdx < 0 || swapIdx >= participants.length) return;
+      this._snapshot();
+      var tmp = participants[idx];
+      participants[idx] = participants[swapIdx];
+      participants[swapIdx] = tmp;
+      this._updateSequenceModel({ participants: participants });
+    },
+
     addSequenceMessage: function (payload) {
       if (this.isFlowchart) return;
       var participants = this.model.participants || [];
@@ -789,6 +806,7 @@ Vue.component('mermaid-live-editor', {
             @toggle-sequence-message-line-type="toggleSequenceMessageLineType"\
             @set-sequence-message-line-type="setSequenceMessageLineType"\
             @toggle-participant-kind="toggleParticipantKind"\
+            @move-sequence-participant="moveSequenceParticipant"\
             @node-selected="onNodeSelected"\
             @edge-selected="onEdgeSelected"\
             @sequence-participant-selected="onSequenceParticipantSelected"\
