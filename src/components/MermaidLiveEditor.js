@@ -550,6 +550,105 @@ Vue.component('mermaid-live-editor', {
       if (this.$refs.preview) this.$refs.preview.zoomOut();
     },
 
+    exportPng: function () {
+      var preview = this.$refs.preview;
+      if (!preview) return;
+      var svgStr = preview.svgContent;
+      if (!svgStr) return;
+
+      var self = this;
+      var scale = 2;
+      var pad   = 20;
+
+      var parser = new DOMParser();
+      var doc    = parser.parseFromString(svgStr, 'image/svg+xml');
+      var svgEl  = doc.querySelector('svg');
+      if (!svgEl) return;
+
+      // foreignObject → SVG <text> 변환 (브라우저가 img 내 foreignObject를 보안상 차단)
+      var fos = svgEl.querySelectorAll('foreignObject');
+      for (var i = 0; i < fos.length; i++) {
+        var fo   = fos[i];
+        var fx   = parseFloat(fo.getAttribute('x')      || 0);
+        var fy   = parseFloat(fo.getAttribute('y')      || 0);
+        var fw   = parseFloat(fo.getAttribute('width')  || 100);
+        var fh   = parseFloat(fo.getAttribute('height') || 20);
+        var lines = (fo.textContent || '').trim().split('\n')
+                      .map(function (l) { return l.trim(); })
+                      .filter(function (l) { return l.length > 0; });
+
+        var textEl = doc.createElementNS('http://www.w3.org/2000/svg', 'text');
+        textEl.setAttribute('x', fx + fw / 2);
+        textEl.setAttribute('y', fy + fh / 2);
+        textEl.setAttribute('text-anchor',       'middle');
+        textEl.setAttribute('dominant-baseline', 'middle');
+        textEl.setAttribute('font-size',   '14');
+        textEl.setAttribute('font-family', 'sans-serif');
+        textEl.setAttribute('fill',        '#333');
+
+        if (lines.length <= 1) {
+          textEl.textContent = lines[0] || '';
+        } else {
+          var lineH = 18;
+          var startDy = -(lines.length - 1) / 2 * lineH;
+          for (var li = 0; li < lines.length; li++) {
+            var tspan = doc.createElementNS('http://www.w3.org/2000/svg', 'tspan');
+            tspan.setAttribute('x',  fx + fw / 2);
+            tspan.setAttribute('dy', li === 0 ? startDy : lineH);
+            tspan.textContent = lines[li];
+            textEl.appendChild(tspan);
+          }
+        }
+        fo.parentNode.replaceChild(textEl, fo);
+      }
+
+      var vb = svgEl.getAttribute('viewBox');
+      var w, h;
+      if (vb) {
+        var parts = vb.trim().split(/[\s,]+/);
+        w = parseFloat(parts[2]) || 800;
+        h = parseFloat(parts[3]) || 600;
+      } else {
+        w = parseFloat(svgEl.getAttribute('width'))  || 800;
+        h = parseFloat(svgEl.getAttribute('height')) || 600;
+      }
+      w = Math.ceil(w + pad * 2);
+      h = Math.ceil(h + pad * 2);
+      svgEl.setAttribute('width',   w);
+      svgEl.setAttribute('height',  h);
+      svgEl.setAttribute('viewBox', (-pad) + ' ' + (-pad) + ' ' + w + ' ' + h);
+
+      var finalSvg = new XMLSerializer().serializeToString(svgEl);
+      var blob = new Blob([finalSvg], { type: 'image/svg+xml;charset=utf-8' });
+      var url  = URL.createObjectURL(blob);
+
+      var img = new Image();
+      img.onload = function () {
+        var cvs = document.createElement('canvas');
+        cvs.width  = w * scale;
+        cvs.height = h * scale;
+        var ctx = cvs.getContext('2d');
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, cvs.width, cvs.height);
+        ctx.scale(scale, scale);
+        ctx.drawImage(img, 0, 0);
+        URL.revokeObjectURL(url);
+        cvs.toBlob(function (pngBlob) {
+          var a = document.createElement('a');
+          a.download = 'diagram.png';
+          a.href = URL.createObjectURL(pngBlob);
+          a.click();
+          URL.revokeObjectURL(a.href);
+          self.showToast('PNG exported!', 'success');
+        }, 'image/png');
+      };
+      img.onerror = function () {
+        URL.revokeObjectURL(url);
+        self.showToast('Export failed', 'error');
+      };
+      img.src = url;
+    },
+
     copySvg: function () {
       var preview = this.$refs.preview;
       if (!preview) return;
@@ -668,6 +767,7 @@ Vue.component('mermaid-live-editor', {
             @zoom-out="zoomOut"\
             @fit-view="fitView"\
             @copy-svg="copySvg"\
+            @export-png="exportPng"\
           ></mermaid-toolbar>\
           <mermaid-preview\
             ref="preview"\

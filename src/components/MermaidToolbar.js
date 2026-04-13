@@ -62,6 +62,7 @@ Vue.component('mermaid-toolbar', {
     zoomIn: function () { this.$emit('zoom-in'); },
     fitView: function () { this.$emit('fit-view'); },
     copySvg: function () { this.$emit('copy-svg'); },
+    exportPng: function () { this.$emit('export-png'); },
     _handleDocumentClick: function (e) {
       if (!this.showShapePicker) return;
       if (this.$el && this.$el.contains(e.target)) return;
@@ -145,7 +146,7 @@ Vue.component('mermaid-toolbar', {
           <button class="toolbar__icon-btn" @click="zoomOut" title="Zoom Out">-</button>\
           <button class="toolbar__icon-btn" @click="zoomIn" title="Zoom In">+</button>\
           <button class="toolbar__icon-btn toolbar__icon-btn--wide" @click="fitView" title="Fit to View">Fit</button>\
-          <button class="toolbar__icon-btn toolbar__icon-btn--wide" @click="copySvg" title="Copy SVG">Copy</button>\
+          <button class="toolbar__icon-btn toolbar__icon-btn--wide" @click="exportPng" title="Export PNG">Export</button>\
         </div>\
         <div v-if="isFlowchart" class="toolbar__group">\
           <select class="toolbar__select" :value="direction" @change="changeDirection" title="Layout direction">\
