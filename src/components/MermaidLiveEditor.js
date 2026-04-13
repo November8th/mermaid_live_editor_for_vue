@@ -485,6 +485,18 @@ Vue.component('mermaid-live-editor', {
       this._updateSequenceModel({ messages: messages });
     },
 
+    setSequenceMessageLineType: function (data) {
+      if (this.isFlowchart) return;
+      this._snapshot();
+      var messages = (this.model.messages || []).map(function (m, idx) {
+        if (idx !== data.index) return m;
+        // activation suffix(+/-) 보존
+        var suffix = /[+-]$/.test(m.operator || '') ? m.operator.slice(-1) : '';
+        return Object.assign({}, m, { operator: data.operator + suffix });
+      });
+      this._updateSequenceModel({ messages: messages });
+    },
+
     // ── Undo / Redo ──────────────────────────────────────────────
 
     undo: function () {
@@ -678,6 +690,7 @@ Vue.component('mermaid-live-editor', {
             @update-sequence-message-text="updateSequenceMessageText"\
             @reverse-sequence-message="reverseSequenceMessage"\
             @toggle-sequence-message-line-type="toggleSequenceMessageLineType"\
+            @set-sequence-message-line-type="setSequenceMessageLineType"\
             @toggle-participant-kind="toggleParticipantKind"\
             @node-selected="onNodeSelected"\
             @edge-selected="onEdgeSelected"\

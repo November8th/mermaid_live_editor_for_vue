@@ -18,6 +18,16 @@ Vue.component('mermaid-preview', {
 
   // 템플릿에서 사용하는 전체 shape 목록
   SHAPES: SvgNodeHandler.SHAPES,
+  LINE_TYPE_OPTIONS: [
+    { operator: '->>',  label: '───▶' },
+    { operator: '-->>',  label: '···▶' },
+    { operator: '->',   label: '───' },
+    { operator: '-->',   label: '···' },
+    { operator: '-x',   label: '───✕' },
+    { operator: '--x',   label: '···✕' },
+    { operator: '-)',   label: '───)' },
+    { operator: '--)',  label: '···)' }
+  ],
   COLOR_PALETTE: [
     { key: 'red',    value: '#ef4444' },
     { key: 'orange', value: '#f97316' },
@@ -63,6 +73,7 @@ Vue.component('mermaid-preview', {
       contextMenu:  null,   // { nodeId, x, y }
       edgeToolbar:  null,   // { edgeIndex, x, y } - 플로우차트 엣지 액션 바
       sequenceToolbar: null, // { type, id|index, x, y }
+      lineTypePicker: false,      // sequence message line type 선택 모드
 
       // 포트 드래그 상태
       portDragging:  false,
@@ -91,7 +102,10 @@ Vue.component('mermaid-preview', {
     },
     selectedEdgeIndex: function () {
       this._syncSelectedEdgeVisuals();
-    }
+    },
+    sequenceToolbar: function (val) {
+      if (!val) this.lineTypePicker = false;
+    },
   },
 
   mounted: function () {
@@ -1007,7 +1021,13 @@ Vue.component('mermaid-preview', {
 
     sequenceToolbarToggleLineType: function () {
       if (!this.sequenceToolbar || this.sequenceToolbar.type !== 'message') return;
-      this.$emit('toggle-sequence-message-line-type', this.sequenceToolbar.index);
+      this.lineTypePicker = true;
+    },
+
+    sequenceToolbarSelectLineType: function (operator) {
+      if (!this.sequenceToolbar || this.sequenceToolbar.type !== 'message') return;
+      this.$emit('set-sequence-message-line-type', { index: this.sequenceToolbar.index, operator: operator });
+      this.lineTypePicker = false;
       this.sequenceToolbar = null;
     },
 
@@ -1162,11 +1182,23 @@ Vue.component('mermaid-preview', {
           <button class="edge-toolbar__btn edge-toolbar__btn--danger" @click="edgeToolbarDelete" title="Delete edge">Delete</button>\
         </div>\
         <div v-if="sequenceToolbar" class="sequence-toolbar" :style="{ left: sequenceToolbar.x + &quot;px&quot;, top: sequenceToolbar.y + &quot;px&quot; }" @click.stop>\
-          <button class="edge-toolbar__btn" @click="sequenceToolbarEdit">Edit</button>\
-          <button v-if="sequenceToolbar.type === &quot;participant&quot;" class="edge-toolbar__btn" @click="sequenceToolbarToggleKind">{{ sequenceToolbar.kind === &quot;actor&quot; ? &quot;→ Participant&quot; : &quot;→ Actor&quot; }}</button>\
-          <button v-if="sequenceToolbar.type === &quot;message&quot;" class="edge-toolbar__btn" @click="sequenceToolbarReverse">Reverse</button>\
-          <button v-if="sequenceToolbar.type === &quot;message&quot;" class="edge-toolbar__btn" @click="sequenceToolbarToggleLineType">Line</button>\
-          <button class="edge-toolbar__btn edge-toolbar__btn--danger" @click="sequenceToolbarDelete">Delete</button>\
+          <template v-if="lineTypePicker">\
+            <button\
+              v-for="opt in $options.LINE_TYPE_OPTIONS"\
+              :key="opt.operator"\
+              class="edge-toolbar__btn edge-toolbar__btn--line-opt"\
+              :title="opt.desc"\
+              @click="sequenceToolbarSelectLineType(opt.operator)"\
+            >{{ opt.label }}</button>\
+            <button class="edge-toolbar__btn" @click="lineTypePicker = false">✕</button>\
+          </template>\
+          <template v-else>\
+            <button class="edge-toolbar__btn" @click="sequenceToolbarEdit">Edit</button>\
+            <button v-if="sequenceToolbar.type === &quot;participant&quot;" class="edge-toolbar__btn" @click="sequenceToolbarToggleKind">{{ sequenceToolbar.kind === &quot;actor&quot; ? &quot;→ Participant&quot; : &quot;→ Actor&quot; }}</button>\
+            <button v-if="sequenceToolbar.type === &quot;message&quot;" class="edge-toolbar__btn" @click="sequenceToolbarReverse">Reverse</button>\
+            <button v-if="sequenceToolbar.type === &quot;message&quot;" class="edge-toolbar__btn" @click.stop="sequenceToolbarToggleLineType">Line</button>\
+            <button class="edge-toolbar__btn edge-toolbar__btn--danger" @click="sequenceToolbarDelete">Delete</button>\
+          </template>\
         </div>\
       </div>\
       <div v-else class="preview-area__empty">\

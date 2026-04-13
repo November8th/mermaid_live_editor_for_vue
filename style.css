@@ -696,6 +696,7 @@ mermaid-toolbar {
   position: absolute;
   top: 0;
   left: 0;
+  z-index: 1;
   will-change: transform;
   /* CSS transform이 위치/크기를 관리. absolute로 레이아웃 흐름에서 분리 */
 }
@@ -1371,6 +1372,16 @@ mermaid-toolbar {
   margin: 0 2px;
 }
 
+.edge-toolbar__btn--active {
+  background: var(--bg-light-hover);
+  color: var(--text-primary);
+}
+
+.edge-toolbar__btn--line-opt {
+  font-family: var(--font-mono, monospace);
+  font-size: 11.5px;
+}
+
 /* ============================================
    시퀀스 다이어그램 인터랙션
    ============================================ */
@@ -1422,7 +1433,7 @@ mermaid-toolbar {
   border-radius: var(--radius-lg);
   padding: 5px 8px;
   box-shadow: var(--shadow-md);
-  z-index: 550;
+  z-index: 9000;
   animation: fadeScaleIn var(--transition-fast) both;
 }
 
