@@ -1,6 +1,12 @@
 (function (global) {
   'use strict';
 
+  function clamp(value, min, max) {
+    if (value < min) return min;
+    if (value > max) return max;
+    return value;
+  }
+
   function getMessageOperatorBase(operator) {
     var suffix = '';
     if (/[+-]$/.test(operator)) {
@@ -166,6 +172,17 @@
       var participant = ctx.findSequenceParticipant(participantId);
       if (!participant) return;
       var rect = participantEl.getBoundingClientRect();
+      var width = Math.max(160, rect.width + 28);
+      var left = clamp(
+        rect.left + rect.width / 2 - width / 2,
+        12,
+        Math.max(12, (global.innerWidth || 0) - width - 12)
+      );
+      var top = clamp(
+        rect.top + rect.height / 2 - 18,
+        12,
+        Math.max(12, (global.innerHeight || 0) - 48)
+      );
 
       ctx.setState({
         sequenceToolbar: null,
@@ -173,10 +190,10 @@
         editingSequenceParticipantText: participant.label || participant.id,
         sequenceParticipantEditStyle: {
           position: 'fixed',
-          left: (rect.left + rect.width / 2 - 90) + 'px',
-          top: (rect.top + rect.height / 2 - 18) + 'px',
+          left: left + 'px',
+          top: top + 'px',
           zIndex: 1000,
-          width: Math.max(160, rect.width + 28) + 'px'
+          width: width + 'px'
         }
       });
       ctx.focusSequenceParticipantInput();
@@ -185,16 +202,27 @@
     startMessageEdit: function (messageIndex, clientX, clientY, svgEl, ctx) {
       var message = ctx.findSequenceMessage(messageIndex);
       if (!message) return;
+      var width = 220;
+      var left = clamp(
+        clientX - width / 2,
+        12,
+        Math.max(12, (global.innerWidth || 0) - width - 12)
+      );
+      var top = clamp(
+        clientY - 22,
+        12,
+        Math.max(12, (global.innerHeight || 0) - 48)
+      );
       ctx.setState({
         sequenceToolbar: null,
         editingSequenceMessageIndex: messageIndex,
         editingSequenceMessageText: message.text || '',
         sequenceMessageEditStyle: {
           position: 'fixed',
-          left: (clientX - 110) + 'px',
-          top: (clientY - 22) + 'px',
+          left: left + 'px',
+          top: top + 'px',
           zIndex: 1000,
-          width: '220px'
+          width: width + 'px'
         }
       });
       ctx.focusSequenceMessageInput();

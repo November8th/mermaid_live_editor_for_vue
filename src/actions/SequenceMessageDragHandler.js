@@ -81,6 +81,9 @@
       zone.setAttribute('y', participant.lifelineTopY);
       zone.setAttribute('width', '32');
       zone.setAttribute('height', Math.max(40, participant.lifelineBottomY - participant.lifelineTopY));
+      zone.setAttribute('fill', '#000');
+      zone.setAttribute('fill-opacity', '0.001');
+      zone.setAttribute('stroke', 'none');
       zone.style.pointerEvents = 'all';
       zone.style.cursor = 'crosshair';
       this._overlay.appendChild(zone);
@@ -112,6 +115,9 @@
       hit.setAttribute('cx', x);
       hit.setAttribute('cy', y);
       hit.setAttribute('r', '18');
+      hit.setAttribute('fill', '#000');
+      hit.setAttribute('fill-opacity', '0.001');
+      hit.setAttribute('stroke', 'none');
       hit.style.pointerEvents = 'all';
       hit.style.cursor = 'crosshair';
       this._overlay.appendChild(hit);
@@ -121,6 +127,9 @@
       circle.setAttribute('cx', x);
       circle.setAttribute('cy', y);
       circle.setAttribute('r', '12');
+      circle.setAttribute('fill', '#1565c0');
+      circle.setAttribute('stroke', '#fff');
+      circle.setAttribute('stroke-width', '2');
       circle.style.pointerEvents = 'none';
       this._overlay.appendChild(circle);
 
@@ -129,6 +138,9 @@
       plus.setAttribute('x', x);
       plus.setAttribute('y', y + 4);
       plus.setAttribute('text-anchor', 'middle');
+      plus.setAttribute('fill', '#fff');
+      plus.setAttribute('font-size', '16');
+      plus.setAttribute('font-weight', '700');
       plus.style.pointerEvents = 'none';
       plus.textContent = '+';
       this._overlay.appendChild(plus);

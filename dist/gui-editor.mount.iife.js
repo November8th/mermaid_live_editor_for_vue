@@ -1,6 +1,6 @@
 /**
  * gui-editor.mount.iife.js
- * Built: 2026-04-14T01:57:17.458Z
+ * Built: 2026-04-14T02:03:05.059Z
  *
  * Browser mount bundle for gui-editor (no minification).
  * Requires global Vue 2 and Mermaid loaded separately.
@@ -2026,6 +2026,9 @@ if (!global.Vue || !/^2\./.test(String(global.Vue.version || ''))) {
       zone.setAttribute('y', participant.lifelineTopY);
       zone.setAttribute('width', '32');
       zone.setAttribute('height', Math.max(40, participant.lifelineBottomY - participant.lifelineTopY));
+      zone.setAttribute('fill', '#000');
+      zone.setAttribute('fill-opacity', '0.001');
+      zone.setAttribute('stroke', 'none');
       zone.style.pointerEvents = 'all';
       zone.style.cursor = 'crosshair';
       this._overlay.appendChild(zone);
@@ -2057,6 +2060,9 @@ if (!global.Vue || !/^2\./.test(String(global.Vue.version || ''))) {
       hit.setAttribute('cx', x);
       hit.setAttribute('cy', y);
       hit.setAttribute('r', '18');
+      hit.setAttribute('fill', '#000');
+      hit.setAttribute('fill-opacity', '0.001');
+      hit.setAttribute('stroke', 'none');
       hit.style.pointerEvents = 'all';
       hit.style.cursor = 'crosshair';
       this._overlay.appendChild(hit);
@@ -2066,6 +2072,9 @@ if (!global.Vue || !/^2\./.test(String(global.Vue.version || ''))) {
       circle.setAttribute('cx', x);
       circle.setAttribute('cy', y);
       circle.setAttribute('r', '12');
+      circle.setAttribute('fill', '#1565c0');
+      circle.setAttribute('stroke', '#fff');
+      circle.setAttribute('stroke-width', '2');
       circle.style.pointerEvents = 'none';
       this._overlay.appendChild(circle);
 
@@ -2074,6 +2083,9 @@ if (!global.Vue || !/^2\./.test(String(global.Vue.version || ''))) {
       plus.setAttribute('x', x);
       plus.setAttribute('y', y + 4);
       plus.setAttribute('text-anchor', 'middle');
+      plus.setAttribute('fill', '#fff');
+      plus.setAttribute('font-size', '16');
+      plus.setAttribute('font-weight', '700');
       plus.style.pointerEvents = 'none';
       plus.textContent = '+';
       this._overlay.appendChild(plus);
@@ -2211,6 +2223,12 @@ if (!global.Vue || !/^2\./.test(String(global.Vue.version || ''))) {
 /* ===== src/actions/SequenceSvgHandler.js ===== */
 (function (global) {
   'use strict';
+
+  function clamp(value, min, max) {
+    if (value < min) return min;
+    if (value > max) return max;
+    return value;
+  }
 
   function getMessageOperatorBase(operator) {
     var suffix = '';
@@ -2377,6 +2395,17 @@ if (!global.Vue || !/^2\./.test(String(global.Vue.version || ''))) {
       var participant = ctx.findSequenceParticipant(participantId);
       if (!participant) return;
       var rect = participantEl.getBoundingClientRect();
+      var width = Math.max(160, rect.width + 28);
+      var left = clamp(
+        rect.left + rect.width / 2 - width / 2,
+        12,
+        Math.max(12, (global.innerWidth || 0) - width - 12)
+      );
+      var top = clamp(
+        rect.top + rect.height / 2 - 18,
+        12,
+        Math.max(12, (global.innerHeight || 0) - 48)
+      );
 
       ctx.setState({
         sequenceToolbar: null,
@@ -2384,10 +2413,10 @@ if (!global.Vue || !/^2\./.test(String(global.Vue.version || ''))) {
         editingSequenceParticipantText: participant.label || participant.id,
         sequenceParticipantEditStyle: {
           position: 'fixed',
-          left: (rect.left + rect.width / 2 - 90) + 'px',
-          top: (rect.top + rect.height / 2 - 18) + 'px',
+          left: left + 'px',
+          top: top + 'px',
           zIndex: 1000,
-          width: Math.max(160, rect.width + 28) + 'px'
+          width: width + 'px'
         }
       });
       ctx.focusSequenceParticipantInput();
@@ -2396,16 +2425,27 @@ if (!global.Vue || !/^2\./.test(String(global.Vue.version || ''))) {
     startMessageEdit: function (messageIndex, clientX, clientY, svgEl, ctx) {
       var message = ctx.findSequenceMessage(messageIndex);
       if (!message) return;
+      var width = 220;
+      var left = clamp(
+        clientX - width / 2,
+        12,
+        Math.max(12, (global.innerWidth || 0) - width - 12)
+      );
+      var top = clamp(
+        clientY - 22,
+        12,
+        Math.max(12, (global.innerHeight || 0) - 48)
+      );
       ctx.setState({
         sequenceToolbar: null,
         editingSequenceMessageIndex: messageIndex,
         editingSequenceMessageText: message.text || '',
         sequenceMessageEditStyle: {
           position: 'fixed',
-          left: (clientX - 110) + 'px',
-          top: (clientY - 22) + 'px',
+          left: left + 'px',
+          top: top + 'px',
           zIndex: 1000,
-          width: '220px'
+          width: width + 'px'
         }
       });
       ctx.focusSequenceMessageInput();
