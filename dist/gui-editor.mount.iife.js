@@ -1,6 +1,6 @@
 /**
  * gui-editor.mount.iife.js
- * Built: 2026-04-14T06:11:12.216Z
+ * Built: 2026-04-14T07:40:10.555Z
  *
  * Browser mount bundle for gui-editor (no minification).
  * Requires global Vue 2 and Mermaid loaded separately.
@@ -204,8 +204,8 @@ if (!global.Vue || !/^2\./.test(String(global.Vue.version || ''))) {
     { open: '([', close: '])', shape: 'stadium' },
     { open: '[[', close: ']]', shape: 'subroutine' },
     { open: '[(', close: ')]', shape: 'cylinder' },
-    { open: '{', close: '}', shape: 'rhombus' },
     { open: '{{', close: '}}', shape: 'hexagon' },
+    { open: '{', close: '}', shape: 'rhombus' },
     { open: '[/', close: '/]', shape: 'parallelogram' },
     { open: '[\\', close: '\\]', shape: 'parallelogram_alt' },
     { open: '[/', close: '\\]', shape: 'trapezoid' },
