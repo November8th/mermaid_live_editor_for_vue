@@ -226,6 +226,7 @@
 
 .gui-editor-shell .toolbar__group--zoom {
   margin-left: auto;
+  gap: 8px;
   justify-content: flex-end;
 }
 
@@ -326,6 +327,9 @@
 }
 
 .gui-editor-shell .toolbar__icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   height: 32px;
   min-width: 32px;
   padding: 0 10px;
@@ -339,10 +343,39 @@
   transition: all var(--transition-fast);
 }
 
+.gui-editor-shell .toolbar__icon-svg {
+  width: 20px;
+  height: 20px;
+  display: block;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.9;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
 .gui-editor-shell .toolbar__icon-btn:hover {
   background: var(--bg-light-hover);
   color: var(--text-primary);
   border-color: #b8c4dc;
+}
+
+.gui-editor-shell .toolbar__icon-btn--floating {
+  width: 26px;
+  min-width: 26px;
+  height: 26px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: #6b7280;
+}
+
+.gui-editor-shell .toolbar__icon-btn--floating:hover {
+  background: transparent;
+  border-color: transparent;
+  color: #374151;
+  box-shadow: none;
 }
 
 .gui-editor-shell .toolbar__icon-btn--wide { min-width: 54px; }
@@ -1116,6 +1149,9 @@
 }
 
 .gui-editor-shell .toolbar__icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   height: 26px;
   min-width: 26px;
   padding: 0 8px;
@@ -1125,8 +1161,30 @@
   box-shadow: none;
 }
 
+.gui-editor-shell .toolbar__icon-btn--floating {
+  width: 26px;
+  min-width: 26px;
+  height: 26px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: #6b7280;
+}
+
+.gui-editor-shell .toolbar__icon-btn--floating:hover {
+  background: transparent;
+  border-color: transparent;
+  color: #374151;
+  box-shadow: none;
+}
+
 .gui-editor-shell .toolbar__icon-btn--wide {
   min-width: 42px;
+}
+
+.gui-editor-shell .toolbar__icon-svg {
+  width: 20px;
+  height: 20px;
 }
 
 .gui-editor-shell .toolbar__btn--active {
@@ -1151,6 +1209,7 @@
 
 .gui-editor-shell .toolbar__group--zoom {
   margin-left: auto;
+  gap: 8px;
 }
 
 .gui-editor-shell .preview-area {

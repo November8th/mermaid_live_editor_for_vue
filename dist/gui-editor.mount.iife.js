@@ -1,6 +1,6 @@
 /**
  * gui-editor.mount.iife.js
- * Built: 2026-04-14T02:03:05.059Z
+ * Built: 2026-04-14T02:15:49.323Z
  *
  * Browser mount bundle for gui-editor (no minification).
  * Requires global Vue 2 and Mermaid loaded separately.
@@ -2696,10 +2696,34 @@ Vue.component('mermaid-toolbar', {
           </select>\
         </div>\
         <div class="toolbar__group toolbar__group--zoom">\
-          <button class="toolbar__icon-btn" @click="zoomOut" title="Zoom Out">-</button>\
-          <button class="toolbar__icon-btn" @click="zoomIn" title="Zoom In">+</button>\
-          <button class="toolbar__icon-btn toolbar__icon-btn--wide" @click="fitView" title="Fit to View">Fit</button>\
-          <button class="toolbar__icon-btn toolbar__icon-btn--wide" @click="exportPng" title="Export PNG">PNG</button>\
+          <button class="toolbar__icon-btn toolbar__icon-btn--floating" @click="zoomIn" title="Zoom In" aria-label="Zoom In">\
+            <svg class="toolbar__icon-svg" viewBox="0 0 24 24" aria-hidden="true">\
+              <circle cx="10" cy="10" r="6.5"></circle>\
+              <line x1="14.8" y1="14.8" x2="20" y2="20"></line>\
+              <line x1="7" y1="10" x2="13" y2="10"></line>\
+              <line x1="10" y1="7" x2="10" y2="13"></line>\
+            </svg>\
+          </button>\
+          <button class="toolbar__icon-btn toolbar__icon-btn--floating" @click="zoomOut" title="Zoom Out" aria-label="Zoom Out">\
+            <svg class="toolbar__icon-svg" viewBox="0 0 24 24" aria-hidden="true">\
+              <circle cx="10" cy="10" r="6.5"></circle>\
+              <line x1="14.8" y1="14.8" x2="20" y2="20"></line>\
+              <line x1="7" y1="10" x2="13" y2="10"></line>\
+            </svg>\
+          </button>\
+          <button class="toolbar__icon-btn toolbar__icon-btn--floating" @click="fitView" title="Fit to View" aria-label="Fit to View">\
+            <svg class="toolbar__icon-svg" viewBox="0 0 24 24" aria-hidden="true">\
+              <polyline points="8,5 5,5 5,8"></polyline>\
+              <line x1="5" y1="5" x2="9" y2="9"></line>\
+              <polyline points="16,5 19,5 19,8"></polyline>\
+              <line x1="19" y1="5" x2="15" y2="9"></line>\
+              <polyline points="5,16 5,19 8,19"></polyline>\
+              <line x1="5" y1="19" x2="9" y2="15"></line>\
+              <polyline points="16,19 19,19 19,16"></polyline>\
+              <line x1="19" y1="19" x2="15" y2="15"></line>\
+            </svg>\
+          </button>\
+          <button class="toolbar__btn" @click="exportPng" title="Export PNG">PNG</button>\
         </div>\
       </div>\
     </div>\
