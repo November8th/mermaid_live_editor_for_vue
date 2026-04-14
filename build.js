@@ -1,14 +1,19 @@
 /**
  * gui-editor bundle builder
  * Usage: node build.js
- * Output: dist/gui-editor.bundle.js
  *
- * 의존성 순서가 중요하다 — 하위 유틸부터 상위 컴포넌트 순으로 나열.
+ * Outputs:
+ * - dist/gui-editor.component.js
+ * - dist/gui-editor.mount.iife.js
+ * - dist/GuiEditor.css
+ *
+ * File order matters because child modules must be registered before
+ * parent components use them.
  */
 const fs = require('fs');
 const path = require('path');
 
-const files = [
+const coreFiles = [
   'src/sequence-parser.js',
   'src/sequence-generator.js',
   'src/mermaid-parser.js',
@@ -27,40 +32,92 @@ const files = [
   'src/components/MermaidFullEditor.js',
 ];
 
+const mountRuntimeFile = 'src/runtime/GuiEditorMount.js';
+
 const assetFiles = [
   'GuiEditor.css',
 ];
 
-const banner = `/**
- * gui-editor.bundle.js
- * Built: ${new Date().toISOString()}
- *
- * Concatenation of gui-editor source files (no minification).
- * Requires: Vue 2, Mermaid (loaded separately before this bundle).
- *
- * Exposes global Vue components:
- *   <mermaid-full-editor> — all-in-one embed component (text + GUI)
- */
-`;
+const builtAt = new Date().toISOString();
 
-fs.mkdirSync('dist', { recursive: true });
+const componentDependencyGuard = `/* ===== runtime: dependency guard ===== */
+(function (global) {
+  if (!global.Vue || !/^2\\./.test(String(global.Vue.version || ''))) {
+    throw new Error('gui-editor component bundle requires global Vue 2 to be loaded first.');
+  }
+})(typeof window !== 'undefined' ? window : this);`;
 
-const parts = [banner];
-for (const file of files) {
+const mountDependencyGuard = `if (!global.Vue || !/^2\\./.test(String(global.Vue.version || ''))) {
+  throw new Error('gui-editor.mount.iife.js requires global Vue 2 to be loaded before this bundle.');
+}`;
+
+function createBanner(fileName, descriptionLines) {
+  return `/**
+ * ${fileName}
+ * Built: ${builtAt}
+ *
+ * ${descriptionLines.join('\n * ')}
+ */`;
+}
+
+function readSource(file) {
   const abs = path.join(__dirname, file);
   if (!fs.existsSync(abs)) {
     console.error('Missing:', abs);
     process.exit(1);
   }
-  const src = fs.readFileSync(abs, 'utf8');
-  parts.push(`/* ===== ${file} ===== */\n${src}`);
-  console.log('  +', file);
+  return fs.readFileSync(abs, 'utf8');
 }
 
-const bundle = parts.join('\n\n');
-const outPath = path.join(__dirname, 'dist', 'gui-editor.bundle.js');
-fs.writeFileSync(outPath, bundle, 'utf8');
-console.log(`\nBundle written: ${outPath} (${(bundle.length / 1024).toFixed(1)} KB)`);
+function createBlocks(files) {
+  return files.map((file) => {
+    console.log('  +', file);
+    return `/* ===== ${file} ===== */\n${readSource(file)}`;
+  });
+}
+
+function writeBundle(relativePath, content) {
+  const outPath = path.join(__dirname, relativePath);
+  fs.writeFileSync(outPath, content, 'utf8');
+  console.log(`\nBundle written: ${outPath} (${(content.length / 1024).toFixed(1)} KB)`);
+}
+
+function wrapIife(innerSource) {
+  return `(function (global) {\n'use strict';\n\n${innerSource}\n\n})(typeof window !== 'undefined' ? window : this);\n`;
+}
+
+fs.mkdirSync('dist', { recursive: true });
+
+console.log('Building component bundles...');
+const componentParts = [
+  createBanner('gui-editor.component.js', [
+    'Concatenation of gui-editor source files (no minification).',
+    'Requires global Vue 2 and Mermaid loaded separately.',
+    'Registers the global Vue component <mermaid-full-editor>.'
+  ]),
+  componentDependencyGuard,
+].concat(createBlocks(coreFiles));
+
+const componentBundle = componentParts.join('\n\n');
+writeBundle('dist/gui-editor.component.js', componentBundle);
+
+console.log('\nBuilding mount bundle...');
+const mountInnerParts = [
+  mountDependencyGuard,
+].concat(createBlocks(coreFiles)).concat([
+  `/* ===== ${mountRuntimeFile} ===== */\n${readSource(mountRuntimeFile)}`
+]);
+
+const mountBundle = [
+  createBanner('gui-editor.mount.iife.js', [
+    'Browser mount bundle for gui-editor (no minification).',
+    'Requires global Vue 2 and Mermaid loaded separately.',
+    'Exposes window.GuiEditor.mount(...).'
+  ]),
+  wrapIife(mountInnerParts.join('\n\n'))
+].join('\n\n');
+
+writeBundle('dist/gui-editor.mount.iife.js', mountBundle);
 
 for (const assetFile of assetFiles) {
   const assetSrc = path.join(__dirname, assetFile);

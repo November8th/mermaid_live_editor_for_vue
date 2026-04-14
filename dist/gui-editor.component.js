@@ -1,14 +1,18 @@
 /**
- * gui-editor.bundle.js
- * Built: 2026-04-13T07:49:34.945Z
+ * gui-editor.component.js
+ * Built: 2026-04-14T00:52:47.009Z
  *
  * Concatenation of gui-editor source files (no minification).
- * Requires: Vue 2, Mermaid (loaded separately before this bundle).
- *
- * Exposes global Vue components:
- *   <mermaid-full-editor> — all-in-one embed component (text + GUI)
+ * Requires global Vue 2 and Mermaid loaded separately.
+ * Registers the global Vue component <mermaid-full-editor>.
  */
 
+/* ===== runtime: dependency guard ===== */
+(function (global) {
+  if (!global.Vue || !/^2\./.test(String(global.Vue.version || ''))) {
+    throw new Error('gui-editor component bundle requires global Vue 2 to be loaded first.');
+  }
+})(typeof window !== 'undefined' ? window : this);
 
 /* ===== src/sequence-parser.js ===== */
 /**
