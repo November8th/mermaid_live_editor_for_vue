@@ -296,6 +296,23 @@ Vue.component('mermaid-full-editor', {
     zoomIn:   function () { if (this.$refs.preview) this.$refs.preview.zoomIn(); },
     zoomOut:  function () { if (this.$refs.preview) this.$refs.preview.zoomOut(); },
 
+    getSvgElement: function () {
+      var preview = this.$refs.preview;
+      if (!preview || !preview.$refs) return null;
+      var canvas = preview.$refs.canvas;
+      if (!canvas) return null;
+      return canvas.querySelector('svg');
+    },
+
+    getSvgText: function () {
+      var svgEl = this.getSvgElement();
+      if (svgEl) {
+        return new XMLSerializer().serializeToString(svgEl);
+      }
+      var preview = this.$refs.preview;
+      return preview && preview.svgContent ? preview.svgContent : '';
+    },
+
     exportPng: function () {
       var preview = this.$refs.preview; if (!preview) return;
       var svgStr = preview.svgContent; if (!svgStr) return;
@@ -324,10 +341,8 @@ Vue.component('mermaid-full-editor', {
     },
 
     copySvg: function () {
-      var preview=this.$refs.preview; if(!preview) return;
-      var canvas=preview.$refs.canvas; if(!canvas) return;
-      var svgEl=canvas.querySelector('svg'); if(!svgEl) return;
-      var svgStr=new XMLSerializer().serializeToString(svgEl), self=this;
+      var svgStr=this.getSvgText(), self=this;
+      if(!svgStr) return;
       if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(svgStr).then(function(){self.showToast('SVG copied!');}).catch(function(){self._fallbackCopy(svgStr);});}else{this._fallbackCopy(svgStr);}
     },
     _fallbackCopy: function (text) {
