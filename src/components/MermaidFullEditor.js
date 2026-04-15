@@ -296,6 +296,17 @@ Vue.component('mermaid-full-editor', {
     zoomIn:   function () { if (this.$refs.preview) this.$refs.preview.zoomIn(); },
     zoomOut:  function () { if (this.$refs.preview) this.$refs.preview.zoomOut(); },
 
+    _runExport: function (promise, successMsg) {
+      var self = this;
+      return promise
+        .then(function () {
+          self.showToast(successMsg);
+        })
+        .catch(function () {
+          self.showToast('Export failed');
+        });
+    },
+
     getSvgElement: function () {
       var preview = this.$refs.preview;
       if (!preview || !preview.$refs) return null;
@@ -305,39 +316,42 @@ Vue.component('mermaid-full-editor', {
     },
 
     getSvgText: function () {
+      var preview = this.$refs.preview;
+      if (preview && preview.svgContent) {
+        return preview.svgContent;
+      }
       var svgEl = this.getSvgElement();
       if (svgEl) {
         return new XMLSerializer().serializeToString(svgEl);
       }
-      var preview = this.$refs.preview;
-      return preview && preview.svgContent ? preview.svgContent : '';
+      return '';
+    },
+
+    exportSvg: function () {
+      var svgStr = this.getSvgText();
+      if (!svgStr) return;
+      return this._runExport(
+        SvgExport.exportSvg(svgStr, { filename: 'diagram.svg' }),
+        'SVG exported!'
+      );
     },
 
     exportPng: function () {
-      var preview = this.$refs.preview; if (!preview) return;
-      var svgStr = preview.svgContent; if (!svgStr) return;
-      var self = this, scale = 2, pad = 20;
-      var doc = new DOMParser().parseFromString(svgStr, 'image/svg+xml');
-      var svgEl = doc.querySelector('svg'); if (!svgEl) return;
-      var fos = svgEl.querySelectorAll('foreignObject');
-      for (var i = 0; i < fos.length; i++) {
-        var fo = fos[i], fx = parseFloat(fo.getAttribute('x')||0), fy = parseFloat(fo.getAttribute('y')||0), fw = parseFloat(fo.getAttribute('width')||100), fh = parseFloat(fo.getAttribute('height')||20);
-        var lines = (fo.textContent||'').trim().split('\n').map(function(l){return l.trim();}).filter(function(l){return l.length>0;});
-        var textEl = doc.createElementNS('http://www.w3.org/2000/svg','text');
-        textEl.setAttribute('x',fx+fw/2); textEl.setAttribute('y',fy+fh/2); textEl.setAttribute('text-anchor','middle'); textEl.setAttribute('dominant-baseline','middle'); textEl.setAttribute('font-size','14'); textEl.setAttribute('font-family','sans-serif'); textEl.setAttribute('fill','#333');
-        if (lines.length <= 1) { textEl.textContent = lines[0]||''; }
-        else { var lineH=18, startDy=-(lines.length-1)/2*lineH; for(var li=0;li<lines.length;li++){var tspan=doc.createElementNS('http://www.w3.org/2000/svg','tspan');tspan.setAttribute('x',fx+fw/2);tspan.setAttribute('dy',li===0?startDy:lineH);tspan.textContent=lines[li];textEl.appendChild(tspan);} }
-        fo.parentNode.replaceChild(textEl, fo);
-      }
-      var vb=svgEl.getAttribute('viewBox'),w,h;
-      if(vb){var pts=vb.trim().split(/[\s,]+/);w=parseFloat(pts[2])||800;h=parseFloat(pts[3])||600;}else{w=parseFloat(svgEl.getAttribute('width'))||800;h=parseFloat(svgEl.getAttribute('height'))||600;}
-      w=Math.ceil(w+pad*2);h=Math.ceil(h+pad*2);
-      svgEl.setAttribute('width',w);svgEl.setAttribute('height',h);svgEl.setAttribute('viewBox',(-pad)+' '+(-pad)+' '+w+' '+h);
-      var url=URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(svgEl)],{type:'image/svg+xml;charset=utf-8'}));
-      var img=new Image();
-      img.onload=function(){var cvs=document.createElement('canvas');cvs.width=w*scale;cvs.height=h*scale;var ctx=cvs.getContext('2d');ctx.fillStyle='#ffffff';ctx.fillRect(0,0,cvs.width,cvs.height);ctx.scale(scale,scale);ctx.drawImage(img,0,0);URL.revokeObjectURL(url);cvs.toBlob(function(pngBlob){var a=document.createElement('a');a.download='diagram.png';a.href=URL.createObjectURL(pngBlob);a.click();URL.revokeObjectURL(a.href);self.showToast('PNG exported!');},'image/png');};
-      img.onerror=function(){URL.revokeObjectURL(url);self.showToast('Export failed');};
-      img.src=url;
+      var svgStr = this.getSvgText();
+      if (!svgStr) return;
+      return this._runExport(
+        SvgExport.exportPng(svgStr, { filename: 'diagram.png', scale: 2, padding: 20 }),
+        'PNG exported!'
+      );
+    },
+
+    exportJpg: function () {
+      var svgStr = this.getSvgText();
+      if (!svgStr) return;
+      return this._runExport(
+        SvgExport.exportJpg(svgStr, { filename: 'diagram.jpg', scale: 2, padding: 20, quality: 0.92 }),
+        'JPG exported!'
+      );
     },
 
     copySvg: function () {
@@ -388,6 +402,8 @@ Vue.component('mermaid-full-editor', {
           @fit-view="fitView"\
           @copy-svg="copySvg"\
           @export-png="exportPng"\
+          @export-svg="exportSvg"\
+          @export-jpg="exportJpg"\
         ></mermaid-toolbar>\
         <mermaid-preview\
           ref="preview"\

@@ -24,7 +24,8 @@ Vue.component('mermaid-toolbar', {
     return {
       showShapePicker: false,
       pendingNodeText: 'Node',
-      pendingNodeColor: ''
+      pendingNodeColor: '',
+      showExportMenu: false
     };
   },
   computed: {
@@ -35,10 +36,15 @@ Vue.component('mermaid-toolbar', {
   methods: {
     toggleShapePicker: function () {
       this.showShapePicker = !this.showShapePicker;
+      if (this.showShapePicker) this.showExportMenu = false;
       if (this.showShapePicker) {
         this.pendingNodeText = 'Node';
         this.pendingNodeColor = '';
       }
+    },
+    toggleExportMenu: function () {
+      this.showExportMenu = !this.showExportMenu;
+      if (this.showExportMenu) this.showShapePicker = false;
     },
     addNode: function (shape) {
       this.showShapePicker = false;
@@ -59,11 +65,15 @@ Vue.component('mermaid-toolbar', {
     zoomIn: function () { this.$emit('zoom-in'); },
     fitView: function () { this.$emit('fit-view'); },
     copySvg: function () { this.$emit('copy-svg'); },
-    exportPng: function () { this.$emit('export-png'); },
+    exportAs: function (format) {
+      this.showExportMenu = false;
+      this.$emit('export-' + format);
+    },
     _handleDocumentClick: function (e) {
-      if (!this.showShapePicker) return;
+      if (!this.showShapePicker && !this.showExportMenu) return;
       if (this.$el && this.$el.contains(e.target)) return;
       this.showShapePicker = false;
+      this.showExportMenu = false;
     }
   },
   mounted: function () {
@@ -169,7 +179,14 @@ Vue.component('mermaid-toolbar', {
               <line x1="19" y1="19" x2="15" y2="15"></line>\
             </svg>\
           </button>\
-          <button class="toolbar__btn" @click="exportPng" title="Export PNG">PNG</button>\
+          <div class="toolbar__export-wrap">\
+            <button class="toolbar__btn" @click="toggleExportMenu" title="Export diagram">Export</button>\
+            <div v-if="showExportMenu" class="toolbar__export-menu" @click.stop>\
+              <button class="toolbar__export-option" @click="exportAs(\'png\')">PNG</button>\
+              <button class="toolbar__export-option" @click="exportAs(\'svg\')">SVG</button>\
+              <button class="toolbar__export-option" @click="exportAs(\'jpg\')">JPG</button>\
+            </div>\
+          </div>\
         </div>\
       </div>\
     </div>\

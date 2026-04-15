@@ -103,6 +103,16 @@ GuiEditor.mount = function (target, options) {
   }
 
   var mountApi = null;
+  var getEditorVm = function () {
+    if (!vm) return null;
+    return vm.$children[0] || null;
+  };
+
+  var callEditorMethod = function (methodName, args) {
+    var editorVm = getEditorVm();
+    if (!editorVm || typeof editorVm[methodName] !== 'function') return undefined;
+    return editorVm[methodName].apply(editorVm, args || []);
+  };
 
   var vm = new global.Vue({
     data: function () {
@@ -161,8 +171,46 @@ GuiEditor.mount = function (target, options) {
     },
 
     getVueInstance: function () {
-      if (!vm) return null;
-      return vm.$children[0] || null;
+      return getEditorVm();
+    },
+
+    fitView: function () {
+      callEditorMethod('fitView');
+      return mountApi;
+    },
+
+    zoomIn: function () {
+      callEditorMethod('zoomIn');
+      return mountApi;
+    },
+
+    zoomOut: function () {
+      callEditorMethod('zoomOut');
+      return mountApi;
+    },
+
+    getSvgElement: function () {
+      return callEditorMethod('getSvgElement');
+    },
+
+    getSvgText: function () {
+      return callEditorMethod('getSvgText') || '';
+    },
+
+    copySvg: function () {
+      return callEditorMethod('copySvg');
+    },
+
+    exportSvg: function () {
+      return callEditorMethod('exportSvg');
+    },
+
+    exportPng: function () {
+      return callEditorMethod('exportPng');
+    },
+
+    exportJpg: function () {
+      return callEditorMethod('exportJpg');
     },
 
     destroy: function () {

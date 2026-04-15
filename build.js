@@ -19,6 +19,7 @@ const coreFiles = [
   'src/mermaid-parser.js',
   'src/mermaid-generator.js',
   'src/services/HistoryManager.js',
+  'src/services/SvgExport.js',
   'src/actions/SvgPositionTracker.js',
   'src/actions/SvgNodeHandler.js',
   'src/actions/SvgEdgeHandler.js',
