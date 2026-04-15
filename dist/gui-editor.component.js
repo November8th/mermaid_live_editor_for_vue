@@ -1,6 +1,6 @@
 /**
  * gui-editor.component.js
- * Built: 2026-04-15T01:36:41.451Z
+ * Built: 2026-04-15T02:07:07.021Z
  *
  * Concatenation of gui-editor source files (no minification).
  * Requires global Vue 2 and Mermaid loaded separately.
@@ -190,15 +190,9 @@
 
 
 /* ===== src/mermaid-parser.js ===== */
-/**
- * Mermaid 플로우차트 파서
- * Mermaid flowchart/graph 문법을 내부 모델로 변환한다.
- */
-
 (function (global) {
   'use strict';
 
-  // shape 정의: [여는 bracket, 닫는 bracket, shape 이름]
   var SHAPE_MAP = [
     { open: '((', close: '))', shape: 'double_circle' },
     { open: '([', close: '])', shape: 'stadium' },
@@ -212,44 +206,86 @@
     { open: '[\\', close: '/]', shape: 'trapezoid_alt' },
     { open: '>', close: ']', shape: 'asymmetric' },
     { open: '(', close: ')', shape: 'round' },
-    { open: '[', close: ']', shape: 'rect' },
+    { open: '[', close: ']', shape: 'rect' }
   ];
 
-  // 엣지 파싱 패턴.
-  // 순서가 중요하다. label 포함 패턴이 plain edge보다 먼저 와야
-  // "-->" 앞부분에서 잘못 소비되지 않는다.
-  // 주의: "-- label -->" 패턴은 plain "-->" 보다 먼저 와야 한다.
-  // "-->" 역시 "--"로 시작하므로 순서가 바뀌면 앞에서 잘못 소비된다.
   var EDGE_PATTERNS = [
-    // "-- label -->" / "== label ==>" 형태의 대체 레이블 문법
     { regex: /^==\s+(.+?)\s*==>/, type: '==>', hasLabel: true },
     { regex: /^--\s+(.+?)\s*-->/, type: '-->', hasLabel: true },
-    { regex: /^--\s+(.+?)\s*-\.->/, type: '-.->',  hasLabel: true },
+    { regex: /^--\s+(.+?)\s*-\.->/, type: '-.->', hasLabel: true },
     { regex: /^--\s+(.+?)\s*---/, type: '---', hasLabel: true },
-    // 파이프 레이블 문법: -->|label|
     { regex: /^==>\|([^|]*)\|/, type: '==>', hasLabel: true },
     { regex: /^==>\s*/, type: '==>', hasLabel: false },
     { regex: /^-->\|([^|]*)\|/, type: '-->', hasLabel: true },
     { regex: /^-->\s*/, type: '-->', hasLabel: false },
-    { regex: /^-\.->\|([^|]*)\|/, type: '-.->',  hasLabel: true },
-    { regex: /^-\.->\s*/, type: '-.->',  hasLabel: false },
+    { regex: /^-\.->\|([^|]*)\|/, type: '-.->', hasLabel: true },
+    { regex: /^-\.->\s*/, type: '-.->', hasLabel: false },
     { regex: /^---\|([^|]*)\|/, type: '---', hasLabel: true },
     { regex: /^---\s*/, type: '---', hasLabel: false },
     { regex: /^-\.-\|([^|]*)\|/, type: '-.-', hasLabel: true },
     { regex: /^-\.-\s*/, type: '-.-', hasLabel: false },
     { regex: /^===\|([^|]*)\|/, type: '===', hasLabel: true },
-    { regex: /^===\s*/, type: '===', hasLabel: false },
+    { regex: /^===\s*/, type: '===', hasLabel: false }
   ];
 
-  /**
-   * 주어진 문자열 시작 위치에서 노드 정의 1개를 파싱한다.
-   * 반환값: { id, text, shape, endIndex } 또는 null
-   */
+  function getShapeCandidates(rest) {
+    var candidates = [];
+    for (var i = 0; i < SHAPE_MAP.length; i++) {
+      if (rest.indexOf(SHAPE_MAP[i].open) === 0) {
+        candidates.push({ def: SHAPE_MAP[i], order: i });
+      }
+    }
+
+    candidates.sort(function (a, b) {
+      var openDiff = b.def.open.length - a.def.open.length;
+      if (openDiff) return openDiff;
+      var closeDiff = b.def.close.length - a.def.close.length;
+      if (closeDiff) return closeDiff;
+      return a.order - b.order;
+    });
+
+    return candidates;
+  }
+
+  function isEscapedChar(text, index) {
+    var slashCount = 0;
+    for (var i = index - 1; i >= 0 && text.charAt(i) === '\\'; i--) {
+      slashCount++;
+    }
+    return (slashCount % 2) === 1;
+  }
+
+  // quoted label 안의 ] ) } 같은 문자를 종료 토큰으로 오인하지 않도록
+  // escape를 건너뛰며 실제 닫는 quote 위치를 찾는다.
+  function findQuotedClose(rest, openLen, closeToken) {
+    for (var i = openLen + 1; i < rest.length; i++) {
+      if (rest.charAt(i) !== '"' || isEscapedChar(rest, i)) continue;
+      if (rest.substr(i + 1, closeToken.length) === closeToken) {
+        return i;
+      }
+    }
+    return -1;
+  }
+
+  // generator가 넣은 최소 escape(\" \\)만 복원한다.
+  function decodeQuotedLabel(text) {
+    var out = '';
+    for (var i = 0; i < text.length; i++) {
+      var ch = text.charAt(i);
+      if (ch === '\\' && i + 1 < text.length) {
+        out += text.charAt(i + 1);
+        i++;
+      } else {
+        out += ch;
+      }
+    }
+    return out;
+  }
+
   function parseNodeDef(str) {
     str = str.trim();
     if (!str) return null;
 
-    // node id 추출
     var idMatch = str.match(/^([a-zA-Z_\u3131-\uD79D][a-zA-Z0-9_\u3131-\uD79D]*)/);
     if (!idMatch) return null;
 
@@ -260,40 +296,22 @@
       return { id: id, text: id, shape: 'rect', endIndex: id.length, raw: id };
     }
 
-    // shape별 bracket 조합을 순서대로 검사한다.
-    // 길이가 긴 토큰이 앞에 있으므로 [[ ]] 와 [ ]가 섞여도 긴 쪽이 먼저 잡힌다.
-    for (var i = 0; i < SHAPE_MAP.length; i++) {
-      var shapeDef = SHAPE_MAP[i];
-      if (rest.indexOf(shapeDef.open) === 0) {
-        var openLen = shapeDef.open.length;
-        var innerStart = rest.substring(openLen);
-        var text, totalLen, closeIdx;
+    // 겹치는 bracket 문법({{ }}/{} , [/] 계열 등)은
+    // 긴 토큰을 우선 보는 쪽이 오인식 위험이 적다.
+    var candidates = getShapeCandidates(rest);
+    for (var i = 0; i < candidates.length; i++) {
+      var shapeDef = candidates[i].def;
+      var openLen = shapeDef.open.length;
+      var innerStart = rest.substring(openLen);
+      var text;
+      var totalLen;
+      var closeIdx;
 
-        // quoted label은 단순히 첫 닫는 bracket을 찾으면 안 된다.
-        // 예: A["char (*buf)[16]"] 에서 ]는 텍스트 일부이므로, 실제 닫힘은 "] 시퀀스다.
-        if (innerStart.charAt(0) === '"') {
-          var closeSeq = '"' + shapeDef.close;
-          var seqIdx = rest.indexOf(closeSeq, openLen + 1);
-          if (seqIdx !== -1) {
-            text = rest.substring(openLen + 1, seqIdx)
-              .replace(/\\"/g, '"')
-              .replace(/\\\\/g, '\\'); // 양끝 quote 제거 후 escape 복원
-            totalLen = id.length + seqIdx + closeSeq.length;
-            return {
-              id: id,
-              text: text || id,
-              shape: shapeDef.shape,
-              endIndex: totalLen,
-              raw: str.substring(0, totalLen)
-            };
-          }
-        }
-
-        // quote가 없는 경우 첫 닫는 bracket을 기준으로 읽는다.
-        closeIdx = rest.indexOf(shapeDef.close, openLen);
-        if (closeIdx !== -1) {
-          text = rest.substring(openLen, closeIdx).trim();
-          totalLen = id.length + closeIdx + shapeDef.close.length;
+      if (innerStart.charAt(0) === '"') {
+        var quoteIdx = findQuotedClose(rest, openLen, shapeDef.close);
+        if (quoteIdx !== -1) {
+          text = decodeQuotedLabel(rest.substring(openLen + 1, quoteIdx));
+          totalLen = id.length + quoteIdx + 1 + shapeDef.close.length;
           return {
             id: id,
             text: text || id,
@@ -303,15 +321,24 @@
           };
         }
       }
+
+      closeIdx = rest.indexOf(shapeDef.close, openLen);
+      if (closeIdx !== -1) {
+        text = rest.substring(openLen, closeIdx).trim();
+        totalLen = id.length + closeIdx + shapeDef.close.length;
+        return {
+          id: id,
+          text: text || id,
+          shape: shapeDef.shape,
+          endIndex: totalLen,
+          raw: str.substring(0, totalLen)
+        };
+      }
     }
 
     return { id: id, text: id, shape: 'rect', endIndex: id.length, raw: id };
   }
 
-  /**
-   * 남은 문자열에서 edge를 파싱한다.
-   * 반환값: { type, label, endIndex } 또는 null
-   */
   function parseEdge(str) {
     str = str.trim();
     for (var i = 0; i < EDGE_PATTERNS.length; i++) {
@@ -357,10 +384,6 @@
     }
   }
 
-  /**
-   * node-edge-node가 연쇄된 한 줄을 파싱한다.
-   * 예: A[Start] --> B[Process] --> C[End]
-   */
   function parseFlowLine(line, model) {
     line = line.trim();
     if (!line) return;
@@ -372,27 +395,20 @@
       remaining = remaining.trim();
       if (!remaining) break;
 
-      // 현재 위치에서 노드 1개를 읽는다.
       var node = parseNodeDef(remaining);
       if (!node) break;
 
-      // 노드가 처음 나오면 등록한다.
       if (!model._nodeMap[node.id]) {
         var nodeObj = { id: node.id, text: node.text, shape: node.shape };
         model.nodes.push(nodeObj);
         model._nodeMap[node.id] = nodeObj;
-      } else {
-        // 이미 있던 노드라도 텍스트/shape가 명시돼 있으면 갱신한다.
-        if (node.text !== node.id || node.shape !== 'rect') {
-          model._nodeMap[node.id].text = node.text;
-          model._nodeMap[node.id].shape = node.shape;
-        }
+      } else if (node.text !== node.id || node.shape !== 'rect') {
+        model._nodeMap[node.id].text = node.text;
+        model._nodeMap[node.id].shape = node.shape;
       }
 
       remaining = remaining.substring(node.endIndex).trim();
 
-      // chained 문법(A --> B --> C)을 지원하기 위해
-      // 직전에 읽어 둔 pending edge가 있으면 지금 노드와 연결한다.
       if (prevNodeId !== null && model._pendingEdge) {
         model.edges.push({
           from: prevNodeId,
@@ -403,8 +419,6 @@
         model._pendingEdge = null;
       }
 
-      // 현재 노드 뒤에 엣지가 이어지면 pending 상태로 보관하고,
-      // 다음 루프에서 읽은 노드와 연결한다.
       var edge = parseEdge(remaining);
       if (edge) {
         model._pendingEdge = edge;
@@ -418,11 +432,6 @@
     }
   }
 
-  /**
-   * 메인 파싱 함수
-   * @param {string} script - Mermaid 스크립트 문자열
-   * @returns {object} 내부 모델 { type, direction, nodes, edges }
-   */
   function parseMermaid(script) {
     if (!script || typeof script !== 'string') {
       return { type: 'flowchart', direction: 'TD', nodes: [], edges: [] };
@@ -442,18 +451,14 @@
       _nodeMap: {},
       _pendingEdge: null
     };
-
     var started = false;
 
     for (var i = 0; i < lines.length; i++) {
       var line = lines[i].trim();
 
-      // 빈 줄과 주석은 건너뛴다.
       if (!line || line.indexOf('%%') === 0) continue;
-
-      // classDef / class 라인은 현재 모델에 반영하지 않는다.
       if (line.indexOf('classDef') === 0 || line.indexOf('class ') === 0) continue;
-      
+
       if (line.indexOf('style ') === 0) {
         parseStyleLine(line, model);
         continue;
@@ -464,7 +469,6 @@
         continue;
       }
 
-      // 헤더(flowchart/graph + direction) 파싱
       if (!started) {
         var headerMatch = line.match(/^(?:graph|flowchart)\s+(TD|TB|BT|LR|RL)/i);
         if (headerMatch) {
@@ -473,7 +477,6 @@
           started = true;
           continue;
         }
-        // 방향 없이 graph / flowchart만 있는 경우도 허용
         if (/^(?:graph|flowchart)\s*$/.test(line)) {
           started = true;
           continue;
@@ -481,25 +484,20 @@
       }
 
       if (started) {
-        // subgraph는 지금은 건너뛰되 파싱 자체가 깨지지 않게만 처리
         if (line.indexOf('subgraph') === 0 || line === 'end') continue;
-
         parseFlowLine(line, model);
       }
     }
 
-    // 내부 임시 상태 제거
     delete model._nodeMap;
     delete model._pendingEdge;
 
     return model;
   }
 
-  // 전역 노출
   global.MermaidParser = {
     parse: parseMermaid
   };
-
 })(typeof window !== 'undefined' ? window : this);
 
 
@@ -2873,6 +2871,7 @@ Vue.component('mermaid-editor', {
   props: {
     value: { type: String, default: '' },
     error: { type: String, default: '' },
+    warning: { type: String, default: '' },
     diagramType: { type: String, default: 'flowchart' }
   },
   data: function () {
@@ -2937,6 +2936,9 @@ Vue.component('mermaid-editor', {
         ></textarea>\
         <div v-if="error" class="code-editor__error">\
           <span>!</span><span>{{ error }}</span>\
+        </div>\
+        <div v-if="warning" class="code-editor__warning">\
+          <span>!</span><span>{{ warning }}</span>\
         </div>\
       </div>\
     </div>\
@@ -4397,6 +4399,7 @@ Vue.component('mermaid-full-editor', {
       script: this.value || '',
       model:  { type: 'flowchart', direction: 'TD', nodes: [], edges: [] },
       error:  '',
+      parseWarning: '',
 
       selectedNode: '',
       selectedEdge: null,
@@ -4494,10 +4497,14 @@ Vue.component('mermaid-full-editor', {
         var parsed = MermaidParser.parse(this.script);
         this.model = parsed;
         this.error = '';
+        this.parseWarning = this._buildReservedIdWarning(parsed);
         this.updateNodeCounter();
         this.updateParticipantCounter();
       } catch (e) {
         this.error = e.message || 'Parse error';
+        this.parseWarning = '';
+        this.updateNodeCounter();
+        this.updateParticipantCounter();
       }
     },
 
@@ -4507,18 +4514,21 @@ Vue.component('mermaid-full-editor', {
     },
 
     updateNodeCounter: function () {
-      if (!this.model || !this.model.nodes) return;
-      var max = 0;
-      for (var i = 0; i < this.model.nodes.length; i++) {
-        var nm = this.model.nodes[i].id.match(/(\d+)$/);
-        if (nm) { var n = parseInt(nm[1], 10); if (n > max) max = n; }
+      // parser가 일부 문법을 놓쳐도 script 안에 이미 있는 N숫자 ID는 예약된 것으로 본다.
+      var max = this._scanReservedCounter('N');
+      if (this.model && this.model.nodes) {
+        for (var i = 0; i < this.model.nodes.length; i++) {
+          var nm = this.model.nodes[i].id.match(/(\d+)$/);
+          if (nm) { var n = parseInt(nm[1], 10); if (n > max) max = n; }
+        }
       }
       if (max > this.nodeCounter) this.nodeCounter = max;
     },
 
     updateParticipantCounter: function () {
+      // sequence 쪽도 같은 이유로 raw script의 P숫자 ID를 같이 본다.
+      var max = this._scanReservedCounter('P');
       var participants = (this.model && this.model.participants) || [];
-      var max = 0;
       for (var i = 0; i < participants.length; i++) {
         var pm = String(participants[i].id || '').match(/(\d+)$/);
         if (!pm) continue;
@@ -4528,14 +4538,117 @@ Vue.component('mermaid-full-editor', {
       if (max > this.participantCounter) this.participantCounter = max;
     },
 
+    _scanReservedCounter: function (prefix) {
+      var script = this.script || '';
+      var escapedPrefix = String(prefix).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      var regex = new RegExp('\\b' + escapedPrefix + '(\\d+)\\b', 'g');
+      var max = 0;
+      var match;
+      while ((match = regex.exec(script))) {
+        var n = parseInt(match[1], 10);
+        if (n > max) max = n;
+      }
+      return max;
+    },
+
+    _collectReservedIds: function (prefix) {
+      var script = this.script || '';
+      var escapedPrefix = String(prefix).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      var regex = new RegExp('\\b' + escapedPrefix + '(\\d+)\\b', 'g');
+      var ids = {};
+      var match;
+      while ((match = regex.exec(script))) {
+        ids[prefix + match[1]] = true;
+      }
+      return ids;
+    },
+
+    _collectModelIds: function (items, prefix) {
+      var ids = {};
+      for (var i = 0; i < items.length; i++) {
+        var id = String(items[i] && items[i].id || '');
+        if (new RegExp('^' + prefix + '\\d+$').test(id)) {
+          ids[id] = true;
+        }
+      }
+      return ids;
+    },
+
+    _countMissingIds: function (reserved, parsed) {
+      var count = 0;
+      var keys = Object.keys(reserved);
+      for (var i = 0; i < keys.length; i++) {
+        if (!parsed[keys[i]]) count++;
+      }
+      return count;
+    },
+
+    _buildReservedIdWarning: function (parsed) {
+      if (!parsed) return '';
+      var reservedNodeIds = this._collectReservedIds('N');
+      var reservedParticipantIds = this._collectReservedIds('P');
+      var parsedNodeIds = this._collectModelIds((parsed.nodes || []), 'N');
+      var parsedParticipantIds = this._collectModelIds((parsed.participants || []), 'P');
+      var missingNodeCount = this._countMissingIds(reservedNodeIds, parsedNodeIds);
+      var missingParticipantCount = this._countMissingIds(reservedParticipantIds, parsedParticipantIds);
+
+      if (!missingNodeCount && !missingParticipantCount) return '';
+
+      var parts = [];
+      if (missingNodeCount) parts.push('N ID ' + missingNodeCount + '개');
+      if (missingParticipantCount) parts.push('P ID ' + missingParticipantCount + '개');
+      return '일부 Mermaid 요소가 GUI parser에 완전히 반영되지 않았을 수 있습니다. 누락 추정: ' + parts.join(', ');
+    },
+
+    _scriptContainsId: function (id) {
+      if (!id) return false;
+      var escapedId = String(id).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      return new RegExp('\\b' + escapedId + '\\b').test(this.script || '');
+    },
+
+    _modelContainsNodeId: function (id) {
+      var nodes = (this.model && this.model.nodes) || [];
+      for (var i = 0; i < nodes.length; i++) {
+        if (nodes[i].id === id) return true;
+      }
+      return false;
+    },
+
+    _modelContainsParticipantId: function (id) {
+      var participants = (this.model && this.model.participants) || [];
+      for (var i = 0; i < participants.length; i++) {
+        if (participants[i].id === id) return true;
+      }
+      return false;
+    },
+
+    _nextAvailableNodeId: function () {
+      var candidate = '';
+      do {
+        this.nodeCounter++;
+        candidate = 'N' + this.nodeCounter;
+        // model 파싱 결과와 raw script 둘 다에 없는 ID가 나올 때까지 올린다.
+      } while (this._scriptContainsId(candidate) || this._modelContainsNodeId(candidate));
+      return candidate;
+    },
+
+    _nextAvailableParticipantId: function () {
+      var candidate = '';
+      do {
+        this.participantCounter++;
+        candidate = 'P' + this.participantCounter;
+        // unsupported 문법으로 participant 파싱이 빠져도 ID 충돌은 피한다.
+      } while (this._scriptContainsId(candidate) || this._modelContainsParticipantId(candidate));
+      return candidate;
+    },
+
     addNode: function (shape) {
       if (!this.isFlowchart) return;
       this._snapshot();
       var nodeShape = shape, nodeText = 'Node', nodeFill = '';
       if (shape && typeof shape === 'object') { nodeShape = shape.shape; nodeText = shape.text || nodeText; nodeFill = shape.fill || ''; }
       if (!nodeShape) nodeShape = 'rect';
-      this.nodeCounter++;
-      var newNode = { id: 'N' + this.nodeCounter, text: nodeText, shape: nodeShape };
+      var newNode = { id: this._nextAvailableNodeId(), text: nodeText, shape: nodeShape };
       if (nodeFill) newNode.fill = nodeFill;
       var nodes = this.model.nodes.slice(); nodes.push(newNode);
       this.model = Object.assign({}, this.model, { nodes: nodes });
@@ -4554,16 +4667,18 @@ Vue.component('mermaid-full-editor', {
     },
 
     addSequenceParticipant: function () {
-      if (this.isFlowchart) return; this._snapshot(); this.participantCounter++;
+      if (this.isFlowchart) return; this._snapshot();
       var participants = (this.model.participants || []).slice();
-      participants.push({ id: 'P' + this.participantCounter, label: 'Participant ' + this.participantCounter, kind: 'participant' });
+      var participantId = this._nextAvailableParticipantId();
+      participants.push({ id: participantId, label: 'Participant ' + this.participantCounter, kind: 'participant' });
       this._updateSequenceModel({ participants: participants });
     },
 
     addSequenceActor: function () {
-      if (this.isFlowchart) return; this._snapshot(); this.participantCounter++;
+      if (this.isFlowchart) return; this._snapshot();
       var participants = (this.model.participants || []).slice();
-      participants.push({ id: 'P' + this.participantCounter, label: 'Actor ' + this.participantCounter, kind: 'actor' });
+      var actorId = this._nextAvailableParticipantId();
+      participants.push({ id: actorId, label: 'Actor ' + this.participantCounter, kind: 'actor' });
       this._updateSequenceModel({ participants: participants });
     },
 
@@ -4757,6 +4872,7 @@ Vue.component('mermaid-full-editor', {
         <mermaid-editor\
           :value="script"\
           :error="error"\
+          :warning="parseWarning"\
           :diagram-type="model.type"\
           @input="onScriptChange"\
         ></mermaid-editor>\

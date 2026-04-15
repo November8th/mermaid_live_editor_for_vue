@@ -7,6 +7,7 @@ Vue.component('mermaid-editor', {
   props: {
     value: { type: String, default: '' },
     error: { type: String, default: '' },
+    warning: { type: String, default: '' },
     diagramType: { type: String, default: 'flowchart' }
   },
   data: function () {
@@ -71,6 +72,9 @@ Vue.component('mermaid-editor', {
         ></textarea>\
         <div v-if="error" class="code-editor__error">\
           <span>!</span><span>{{ error }}</span>\
+        </div>\
+        <div v-if="warning" class="code-editor__warning">\
+          <span>!</span><span>{{ warning }}</span>\
         </div>\
       </div>\
     </div>\

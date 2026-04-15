@@ -18,6 +18,7 @@ Vue.component('mermaid-full-editor', {
       script: this.value || '',
       model:  { type: 'flowchart', direction: 'TD', nodes: [], edges: [] },
       error:  '',
+      parseWarning: '',
 
       selectedNode: '',
       selectedEdge: null,
@@ -115,10 +116,14 @@ Vue.component('mermaid-full-editor', {
         var parsed = MermaidParser.parse(this.script);
         this.model = parsed;
         this.error = '';
+        this.parseWarning = this._buildReservedIdWarning(parsed);
         this.updateNodeCounter();
         this.updateParticipantCounter();
       } catch (e) {
         this.error = e.message || 'Parse error';
+        this.parseWarning = '';
+        this.updateNodeCounter();
+        this.updateParticipantCounter();
       }
     },
 
@@ -128,18 +133,21 @@ Vue.component('mermaid-full-editor', {
     },
 
     updateNodeCounter: function () {
-      if (!this.model || !this.model.nodes) return;
-      var max = 0;
-      for (var i = 0; i < this.model.nodes.length; i++) {
-        var nm = this.model.nodes[i].id.match(/(\d+)$/);
-        if (nm) { var n = parseInt(nm[1], 10); if (n > max) max = n; }
+      // parser가 일부 문법을 놓쳐도 script 안에 이미 있는 N숫자 ID는 예약된 것으로 본다.
+      var max = this._scanReservedCounter('N');
+      if (this.model && this.model.nodes) {
+        for (var i = 0; i < this.model.nodes.length; i++) {
+          var nm = this.model.nodes[i].id.match(/(\d+)$/);
+          if (nm) { var n = parseInt(nm[1], 10); if (n > max) max = n; }
+        }
       }
       if (max > this.nodeCounter) this.nodeCounter = max;
     },
 
     updateParticipantCounter: function () {
+      // sequence 쪽도 같은 이유로 raw script의 P숫자 ID를 같이 본다.
+      var max = this._scanReservedCounter('P');
       var participants = (this.model && this.model.participants) || [];
-      var max = 0;
       for (var i = 0; i < participants.length; i++) {
         var pm = String(participants[i].id || '').match(/(\d+)$/);
         if (!pm) continue;
@@ -149,14 +157,117 @@ Vue.component('mermaid-full-editor', {
       if (max > this.participantCounter) this.participantCounter = max;
     },
 
+    _scanReservedCounter: function (prefix) {
+      var script = this.script || '';
+      var escapedPrefix = String(prefix).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      var regex = new RegExp('\\b' + escapedPrefix + '(\\d+)\\b', 'g');
+      var max = 0;
+      var match;
+      while ((match = regex.exec(script))) {
+        var n = parseInt(match[1], 10);
+        if (n > max) max = n;
+      }
+      return max;
+    },
+
+    _collectReservedIds: function (prefix) {
+      var script = this.script || '';
+      var escapedPrefix = String(prefix).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      var regex = new RegExp('\\b' + escapedPrefix + '(\\d+)\\b', 'g');
+      var ids = {};
+      var match;
+      while ((match = regex.exec(script))) {
+        ids[prefix + match[1]] = true;
+      }
+      return ids;
+    },
+
+    _collectModelIds: function (items, prefix) {
+      var ids = {};
+      for (var i = 0; i < items.length; i++) {
+        var id = String(items[i] && items[i].id || '');
+        if (new RegExp('^' + prefix + '\\d+$').test(id)) {
+          ids[id] = true;
+        }
+      }
+      return ids;
+    },
+
+    _countMissingIds: function (reserved, parsed) {
+      var count = 0;
+      var keys = Object.keys(reserved);
+      for (var i = 0; i < keys.length; i++) {
+        if (!parsed[keys[i]]) count++;
+      }
+      return count;
+    },
+
+    _buildReservedIdWarning: function (parsed) {
+      if (!parsed) return '';
+      var reservedNodeIds = this._collectReservedIds('N');
+      var reservedParticipantIds = this._collectReservedIds('P');
+      var parsedNodeIds = this._collectModelIds((parsed.nodes || []), 'N');
+      var parsedParticipantIds = this._collectModelIds((parsed.participants || []), 'P');
+      var missingNodeCount = this._countMissingIds(reservedNodeIds, parsedNodeIds);
+      var missingParticipantCount = this._countMissingIds(reservedParticipantIds, parsedParticipantIds);
+
+      if (!missingNodeCount && !missingParticipantCount) return '';
+
+      var parts = [];
+      if (missingNodeCount) parts.push('N ID ' + missingNodeCount + '개');
+      if (missingParticipantCount) parts.push('P ID ' + missingParticipantCount + '개');
+      return '일부 Mermaid 요소가 GUI parser에 완전히 반영되지 않았을 수 있습니다. 누락 추정: ' + parts.join(', ');
+    },
+
+    _scriptContainsId: function (id) {
+      if (!id) return false;
+      var escapedId = String(id).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      return new RegExp('\\b' + escapedId + '\\b').test(this.script || '');
+    },
+
+    _modelContainsNodeId: function (id) {
+      var nodes = (this.model && this.model.nodes) || [];
+      for (var i = 0; i < nodes.length; i++) {
+        if (nodes[i].id === id) return true;
+      }
+      return false;
+    },
+
+    _modelContainsParticipantId: function (id) {
+      var participants = (this.model && this.model.participants) || [];
+      for (var i = 0; i < participants.length; i++) {
+        if (participants[i].id === id) return true;
+      }
+      return false;
+    },
+
+    _nextAvailableNodeId: function () {
+      var candidate = '';
+      do {
+        this.nodeCounter++;
+        candidate = 'N' + this.nodeCounter;
+        // model 파싱 결과와 raw script 둘 다에 없는 ID가 나올 때까지 올린다.
+      } while (this._scriptContainsId(candidate) || this._modelContainsNodeId(candidate));
+      return candidate;
+    },
+
+    _nextAvailableParticipantId: function () {
+      var candidate = '';
+      do {
+        this.participantCounter++;
+        candidate = 'P' + this.participantCounter;
+        // unsupported 문법으로 participant 파싱이 빠져도 ID 충돌은 피한다.
+      } while (this._scriptContainsId(candidate) || this._modelContainsParticipantId(candidate));
+      return candidate;
+    },
+
     addNode: function (shape) {
       if (!this.isFlowchart) return;
       this._snapshot();
       var nodeShape = shape, nodeText = 'Node', nodeFill = '';
       if (shape && typeof shape === 'object') { nodeShape = shape.shape; nodeText = shape.text || nodeText; nodeFill = shape.fill || ''; }
       if (!nodeShape) nodeShape = 'rect';
-      this.nodeCounter++;
-      var newNode = { id: 'N' + this.nodeCounter, text: nodeText, shape: nodeShape };
+      var newNode = { id: this._nextAvailableNodeId(), text: nodeText, shape: nodeShape };
       if (nodeFill) newNode.fill = nodeFill;
       var nodes = this.model.nodes.slice(); nodes.push(newNode);
       this.model = Object.assign({}, this.model, { nodes: nodes });
@@ -175,16 +286,18 @@ Vue.component('mermaid-full-editor', {
     },
 
     addSequenceParticipant: function () {
-      if (this.isFlowchart) return; this._snapshot(); this.participantCounter++;
+      if (this.isFlowchart) return; this._snapshot();
       var participants = (this.model.participants || []).slice();
-      participants.push({ id: 'P' + this.participantCounter, label: 'Participant ' + this.participantCounter, kind: 'participant' });
+      var participantId = this._nextAvailableParticipantId();
+      participants.push({ id: participantId, label: 'Participant ' + this.participantCounter, kind: 'participant' });
       this._updateSequenceModel({ participants: participants });
     },
 
     addSequenceActor: function () {
-      if (this.isFlowchart) return; this._snapshot(); this.participantCounter++;
+      if (this.isFlowchart) return; this._snapshot();
       var participants = (this.model.participants || []).slice();
-      participants.push({ id: 'P' + this.participantCounter, label: 'Actor ' + this.participantCounter, kind: 'actor' });
+      var actorId = this._nextAvailableParticipantId();
+      participants.push({ id: actorId, label: 'Actor ' + this.participantCounter, kind: 'actor' });
       this._updateSequenceModel({ participants: participants });
     },
 
@@ -378,6 +491,7 @@ Vue.component('mermaid-full-editor', {
         <mermaid-editor\
           :value="script"\
           :error="error"\
+          :warning="parseWarning"\
           :diagram-type="model.type"\
           @input="onScriptChange"\
         ></mermaid-editor>\
