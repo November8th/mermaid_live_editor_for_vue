@@ -4,7 +4,6 @@
  *
  * Outputs:
  * - dist/gui-editor.component.js
- * - dist/gui-editor.mount.iife.js
  * - dist/GuiEditor.css
  *
  * File order matters because child modules must be registered before
@@ -33,8 +32,6 @@ const coreFiles = [
   'src/components/MermaidFullEditor.js',
 ];
 
-const mountRuntimeFile = 'src/runtime/GuiEditorMount.js';
-
 const assetFiles = [
   'GuiEditor.css',
 ];
@@ -47,10 +44,6 @@ const componentDependencyGuard = `/* ===== runtime: dependency guard ===== */
     throw new Error('gui-editor component bundle requires global Vue 2 to be loaded first.');
   }
 })(typeof window !== 'undefined' ? window : this);`;
-
-const mountDependencyGuard = `if (!global.Vue || !/^2\\./.test(String(global.Vue.version || ''))) {
-  throw new Error('gui-editor.mount.iife.js requires global Vue 2 to be loaded before this bundle.');
-}`;
 
 function createBanner(fileName, descriptionLines) {
   return `/**
@@ -83,10 +76,6 @@ function writeBundle(relativePath, content) {
   console.log(`\nBundle written: ${outPath} (${(content.length / 1024).toFixed(1)} KB)`);
 }
 
-function wrapIife(innerSource) {
-  return `(function (global) {\n'use strict';\n\n${innerSource}\n\n})(typeof window !== 'undefined' ? window : this);\n`;
-}
-
 fs.mkdirSync('dist', { recursive: true });
 
 console.log('Building component bundles...');
@@ -101,24 +90,6 @@ const componentParts = [
 
 const componentBundle = componentParts.join('\n\n');
 writeBundle('dist/gui-editor.component.js', componentBundle);
-
-console.log('\nBuilding mount bundle...');
-const mountInnerParts = [
-  mountDependencyGuard,
-].concat(createBlocks(coreFiles)).concat([
-  `/* ===== ${mountRuntimeFile} ===== */\n${readSource(mountRuntimeFile)}`
-]);
-
-const mountBundle = [
-  createBanner('gui-editor.mount.iife.js', [
-    'Browser mount bundle for gui-editor (no minification).',
-    'Requires global Vue 2 and Mermaid loaded separately.',
-    'Exposes window.GuiEditor.mount(...).'
-  ]),
-  wrapIife(mountInnerParts.join('\n\n'))
-].join('\n\n');
-
-writeBundle('dist/gui-editor.mount.iife.js', mountBundle);
 
 for (const assetFile of assetFiles) {
   const assetSrc = path.join(__dirname, assetFile);
