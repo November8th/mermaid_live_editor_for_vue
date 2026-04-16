@@ -423,10 +423,17 @@ Vue.component('mermaid-full-editor', {
 
     getSvgElement: function () {
       var preview = this.$refs.preview;
-      if (!preview || !preview.$refs) return null;
-      var canvas = preview.$refs.canvas;
-      if (!canvas) return null;
-      return canvas.querySelector('svg');
+      if (!preview) return null;
+      // canvas ref는 v-if="svgContent" 조건이라 렌더 완료 전엔 DOM에 없을 수 있음
+      var canvas = preview.$refs && preview.$refs.canvas;
+      if (canvas) return canvas.querySelector('svg');
+      // fallback: svgContent 문자열에서 파싱해서 반환
+      if (preview.svgContent) {
+        var tmp = document.createElement('div');
+        tmp.innerHTML = preview.svgContent;
+        return tmp.querySelector('svg');
+      }
+      return null;
     },
 
     getSvgText: function () {

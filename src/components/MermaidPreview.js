@@ -121,19 +121,20 @@ Vue.component('mermaid-preview', {
     window.addEventListener('resize', this._windowResizeHandler);
 
     // 전역 클릭 시 컨텍스트 메뉴와 엣지 툴바 닫기
-      document.addEventListener('click', function () {
-        var hadEdgeToolbar = !!self.edgeToolbar;
-        self.contextMenu = null;
-        self.edgeToolbar = null;
-        self.flowEdgeColorPicker = false;
-        self.flowEdgeBodyPicker = false;
-        self.flowEdgeHeadPicker = false;
-        self.sequenceToolbar = null;
-        if (hadEdgeToolbar && self.editingEdgeIndex === null) {
-          self.selectedEdgeIndex = null;
-          self._clearEdgeVisualState();
-        }
-    });
+    this._clickCloseHandler = function () {
+      var hadEdgeToolbar = !!self.edgeToolbar;
+      self.contextMenu = null;
+      self.edgeToolbar = null;
+      self.flowEdgeColorPicker = false;
+      self.flowEdgeBodyPicker = false;
+      self.flowEdgeHeadPicker = false;
+      self.sequenceToolbar = null;
+      if (hadEdgeToolbar && self.editingEdgeIndex === null) {
+        self.selectedEdgeIndex = null;
+        self._clearEdgeVisualState();
+      }
+    };
+    document.addEventListener('click', this._clickCloseHandler);
 
     this._pointerDownCommitHandler = function (e) {
       var target = e.target;
@@ -151,7 +152,7 @@ Vue.component('mermaid-preview', {
     document.addEventListener('click', this._suppressClickAfterPanHandler, true);
 
     // 전역 키 입력: Delete, Escape, Ctrl+Z/Y
-    document.addEventListener('keydown', function (e) {
+    this._keydownHandler = function (e) {
       // input / textarea 사용 중에는 전역 단축키를 막는다.
       if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
 
@@ -201,10 +202,19 @@ Vue.component('mermaid-preview', {
         e.preventDefault();
         self.$emit('redo');
       }
-    });
+    };
+    document.addEventListener('keydown', this._keydownHandler);
   },
 
   beforeDestroy: function () {
+    if (this._clickCloseHandler) {
+      document.removeEventListener('click', this._clickCloseHandler);
+      this._clickCloseHandler = null;
+    }
+    if (this._keydownHandler) {
+      document.removeEventListener('keydown', this._keydownHandler);
+      this._keydownHandler = null;
+    }
     if (this._pointerDownCommitHandler) {
       document.removeEventListener('mousedown', this._pointerDownCommitHandler, true);
       this._pointerDownCommitHandler = null;
