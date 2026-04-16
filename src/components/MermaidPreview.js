@@ -294,6 +294,7 @@ Vue.component('mermaid-preview', {
           if (renderToken !== self.renderToken) return;
           self.svgContent  = result.svg;
           self.renderError = '';
+          self.$emit('svg-rendered', result.svg);
           self.$nextTick(function () { self.postRenderSetup(); });
         }).catch(function (err) {
           if (renderToken !== self.renderToken) return;

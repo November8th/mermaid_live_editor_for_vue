@@ -555,6 +555,7 @@ Vue.component('mermaid-full-editor', {
           @sequence-message-selected="onSequenceMessageSelected"\
           @undo="undo"\
           @redo="redo"\
+          @svg-rendered="$emit(\'svg-rendered\', $event)"\
         ></mermaid-preview>\
       </div>\
       <div\

@@ -1,6 +1,6 @@
 /**
  * gui-editor.component.js
- * Built: 2026-04-16T00:41:49.380Z
+ * Built: 2026-04-16T01:27:42.524Z
  *
  * Concatenation of gui-editor source files (no minification).
  * Requires global Vue 2 and Mermaid loaded separately.
@@ -3716,6 +3716,7 @@ Vue.component('mermaid-preview', {
           if (renderToken !== self.renderToken) return;
           self.svgContent  = result.svg;
           self.renderError = '';
+          self.$emit('svg-rendered', result.svg);
           self.$nextTick(function () { self.postRenderSetup(); });
         }).catch(function (err) {
           if (renderToken !== self.renderToken) return;
@@ -5362,6 +5363,7 @@ Vue.component('mermaid-full-editor', {
           @sequence-message-selected="onSequenceMessageSelected"\
           @undo="undo"\
           @redo="redo"\
+          @svg-rendered="$emit(\'svg-rendered\', $event)"\
         ></mermaid-preview>\
       </div>\
       <div\
