@@ -255,7 +255,11 @@
           this._updateSequenceModel({
             participants: participants,
             messages: messages,
-            statements: SequenceStatementUtils.removeMessageStatements(this.model, removedIndices)
+            statements: SequenceStatementUtils.removeParticipantStatements(
+              this.model,
+              data.sequenceParticipantId,
+              removedIndices
+            )
           });
           return true;
         }

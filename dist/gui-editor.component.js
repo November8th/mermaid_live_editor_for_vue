@@ -1,6 +1,6 @@
 /**
  * gui-editor.component.js
- * Built: 2026-04-21T06:24:48.802Z
+ * Built: 2026-04-21T07:08:09.197Z
  *
  * Concatenation of gui-editor source files (no minification).
  * Requires global Vue 2 and Mermaid loaded separately.
@@ -160,6 +160,26 @@
     }
 
     return pruneEmptyBlocks(statements);
+  }
+
+  function removeParticipantStatements(model, participantId, messageIndices) {
+    var statements = removeMessageStatements(model, messageIndices);
+    if (!participantId) return statements;
+
+    var next = [];
+    for (var i = 0; i < statements.length; i++) {
+      var statement = statements[i];
+      if (
+        statement &&
+        statement.type === 'note' &&
+        statement.participants &&
+        statement.participants.indexOf(participantId) !== -1
+      ) {
+        continue;
+      }
+      next.push(statement);
+    }
+    return pruneEmptyBlocks(next);
   }
 
   function pruneEmptyBlocks(statements) {
@@ -448,6 +468,7 @@
     findEnclosingBranchBlock: findEnclosingBranchBlock,
     insertMessageStatement: insertMessageStatement,
     removeMessageStatements: removeMessageStatements,
+    removeParticipantStatements: removeParticipantStatements,
     wrapMessagesInBlock: wrapMessagesInBlock,
     insertBranchStatement: insertBranchStatement,
     updateBlockText: updateBlockText,
@@ -4053,10 +4074,11 @@
       var plus = document.createElementNS('http://www.w3.org/2000/svg', 'text');
       plus.setAttribute('class', 'sequence-plus-label');
       plus.setAttribute('x', x);
-      plus.setAttribute('y', y + 4);
+      plus.setAttribute('y', y + 1.5);
       plus.setAttribute('text-anchor', 'middle');
+      plus.setAttribute('dominant-baseline', 'middle');
       plus.setAttribute('fill', '#fff');
-      plus.setAttribute('font-size', '16');
+      plus.setAttribute('font-size', '20');
       plus.setAttribute('font-weight', '700');
       plus.style.pointerEvents = 'none';
       plus.textContent = '+';
@@ -4500,27 +4522,92 @@
 
     _renderBlockBadges: function (svgEl, model, ctx) {
       var blocks = SequenceStatementUtils.listBlocks(model && model.statements);
-      var labelTextEls = Array.prototype.slice.call(svgEl.querySelectorAll('.labelText'));
-      var allLoopTextEls = Array.prototype.slice.call(svgEl.querySelectorAll('.loopText'));
-      var loopCursor = 0;
+      var labelTextEls = this._sortTextElementsByPosition(Array.prototype.slice.call(svgEl.querySelectorAll('.labelText')));
+      var allLoopTextEls = this._sortTextElementsByPosition(Array.prototype.slice.call(svgEl.querySelectorAll('.loopText')));
+      var usedLoopIndices = {};
       var stmts = model && model.statements;
 
       for (var i = 0; i < blocks.length; i++) {
         var block = blocks[i];
         var labelEl = labelTextEls[i] || null;
-        // loopText가 statements보다 적을 수 있으므로 범위 체크
-        var mainTitleEl = loopCursor < allLoopTextEls.length ? allLoopTextEls[loopCursor++] : null;
+        var mainTitleEl = this._findMatchingLoopText(labelEl, allLoopTextEls, usedLoopIndices);
 
         var branchTitleEls = [];
         var branchStatements = [];
         for (var b = 0; b < block.branchIndices.length; b++) {
-          branchTitleEls.push(loopCursor < allLoopTextEls.length ? allLoopTextEls[loopCursor++] : null);
+          branchTitleEls.push(this._findNextUnusedLoopText(allLoopTextEls, usedLoopIndices));
           var si = block.branchIndices[b];
           branchStatements.push(stmts && stmts[si] ? stmts[si] : {});
         }
 
         this._attachBlockElementInteractions(svgEl, block, labelEl, mainTitleEl, branchTitleEls, branchStatements, ctx);
       }
+    },
+
+    _sortTextElementsByPosition: function (elements) {
+      return (elements || []).slice().sort(function (a, b) {
+        var boxA = null;
+        var boxB = null;
+
+        try { boxA = a && a.getBBox ? a.getBBox() : null; } catch (e1) {}
+        try { boxB = b && b.getBBox ? b.getBBox() : null; } catch (e2) {}
+
+        if (!boxA && !boxB) return 0;
+        if (!boxA) return 1;
+        if (!boxB) return -1;
+
+        var dy = boxA.y - boxB.y;
+        if (Math.abs(dy) > 1) return dy;
+
+        return boxA.x - boxB.x;
+      });
+    },
+
+    _findMatchingLoopText: function (labelEl, allLoopTextEls, usedLoopIndices) {
+      if (!labelEl || !labelEl.getBBox) return this._findNextUnusedLoopText(allLoopTextEls, usedLoopIndices);
+
+      var labelBox;
+      try {
+        labelBox = labelEl.getBBox();
+      } catch (e) {
+        return this._findNextUnusedLoopText(allLoopTextEls, usedLoopIndices);
+      }
+
+      var bestEl = null;
+      var bestIdx = -1;
+      var bestDist = Infinity;
+
+      for (var i = 0; i < allLoopTextEls.length; i++) {
+        if (usedLoopIndices[i]) continue;
+        var loopEl = allLoopTextEls[i];
+        if (!loopEl || !loopEl.getBBox) continue;
+
+        var loopBox;
+        try {
+          loopBox = loopEl.getBBox();
+        } catch (e2) {
+          continue;
+        }
+
+        var dist = Math.abs(loopBox.y - labelBox.y);
+        if (dist < bestDist) {
+          bestDist = dist;
+          bestEl = loopEl;
+          bestIdx = i;
+        }
+      }
+
+      if (bestIdx !== -1) usedLoopIndices[bestIdx] = true;
+      return bestEl;
+    },
+
+    _findNextUnusedLoopText: function (allLoopTextEls, usedLoopIndices) {
+      for (var i = 0; i < allLoopTextEls.length; i++) {
+        if (usedLoopIndices[i]) continue;
+        usedLoopIndices[i] = true;
+        return allLoopTextEls[i];
+      }
+      return null;
     },
 
     _attachBlockElementInteractions: function (svgEl, block, labelEl, titleEl, branchTitleEls, branchStatements, ctx) {
@@ -5322,7 +5409,11 @@
           this._updateSequenceModel({
             participants: participants,
             messages: messages,
-            statements: SequenceStatementUtils.removeMessageStatements(this.model, removedIndices)
+            statements: SequenceStatementUtils.removeParticipantStatements(
+              this.model,
+              data.sequenceParticipantId,
+              removedIndices
+            )
           });
           return true;
         }

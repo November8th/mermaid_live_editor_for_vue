@@ -54,6 +54,26 @@
     return pruneEmptyBlocks(statements);
   }
 
+  function removeParticipantStatements(model, participantId, messageIndices) {
+    var statements = removeMessageStatements(model, messageIndices);
+    if (!participantId) return statements;
+
+    var next = [];
+    for (var i = 0; i < statements.length; i++) {
+      var statement = statements[i];
+      if (
+        statement &&
+        statement.type === 'note' &&
+        statement.participants &&
+        statement.participants.indexOf(participantId) !== -1
+      ) {
+        continue;
+      }
+      next.push(statement);
+    }
+    return pruneEmptyBlocks(next);
+  }
+
   function pruneEmptyBlocks(statements) {
     var next = (statements || []).slice();
     var changed = true;
@@ -340,6 +360,7 @@
     findEnclosingBranchBlock: findEnclosingBranchBlock,
     insertMessageStatement: insertMessageStatement,
     removeMessageStatements: removeMessageStatements,
+    removeParticipantStatements: removeParticipantStatements,
     wrapMessagesInBlock: wrapMessagesInBlock,
     insertBranchStatement: insertBranchStatement,
     updateBlockText: updateBlockText,

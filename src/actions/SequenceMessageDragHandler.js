@@ -138,10 +138,11 @@
       var plus = document.createElementNS('http://www.w3.org/2000/svg', 'text');
       plus.setAttribute('class', 'sequence-plus-label');
       plus.setAttribute('x', x);
-      plus.setAttribute('y', y + 4);
+      plus.setAttribute('y', y + 1.5);
       plus.setAttribute('text-anchor', 'middle');
+      plus.setAttribute('dominant-baseline', 'middle');
       plus.setAttribute('fill', '#fff');
-      plus.setAttribute('font-size', '16');
+      plus.setAttribute('font-size', '20');
       plus.setAttribute('font-weight', '700');
       plus.style.pointerEvents = 'none';
       plus.textContent = '+';
