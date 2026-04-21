@@ -105,6 +105,7 @@
     if (!match) return false;
     var participants = match[1].split(',').map(function (p) { return p.trim(); }).filter(Boolean);
     var text = (match[2] || '').trim();
+    if (!text) return true;
     for (var i = 0; i < participants.length; i++) {
       ensureParticipant(model, participants[i], participants[i]);
     }

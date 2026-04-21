@@ -1,6 +1,6 @@
 /**
  * gui-editor.component.js
- * Built: 2026-04-21T07:43:50.136Z
+ * Built: 2026-04-21T07:53:37.463Z
  *
  * Concatenation of gui-editor source files (no minification).
  * Requires global Vue 2 and Mermaid loaded separately.
@@ -832,6 +832,7 @@
     if (!match) return false;
     var participants = match[1].split(',').map(function (p) { return p.trim(); }).filter(Boolean);
     var text = (match[2] || '').trim();
+    if (!text) return true;
     for (var i = 0; i < participants.length; i++) {
       ensureParticipant(model, participants[i], participants[i]);
     }
@@ -1047,7 +1048,9 @@
 
     if (statement.type === 'note') {
       var parts = (statement.participants || []).join(', ');
-      return renderIndented(level || 0, 'note over ' + parts + (statement.text ? ': ' + statement.text : ''));
+      var text = String(statement.text || '').trim();
+      if (!parts || !text) return '';
+      return renderIndented(level || 0, 'note over ' + parts + ': ' + text);
     }
 
     if (statement.type === 'raw') {
@@ -5348,9 +5351,12 @@
 
       updateSequenceBlockText: function (data) {
         if (this.isFlowchart || !data || !data.blockId) return;
+        var nextText = String(data.text || '').trim();
         this._snapshot();
         this._updateSequenceModel({
-          statements: SequenceStatementUtils.updateBlockText(this.model, data.blockId, data.text || '')
+          statements: nextText
+            ? SequenceStatementUtils.updateBlockText(this.model, data.blockId, nextText)
+            : SequenceStatementUtils.deleteBlock(this.model, data.blockId)
         });
       },
 

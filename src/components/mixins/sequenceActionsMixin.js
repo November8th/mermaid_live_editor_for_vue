@@ -194,9 +194,12 @@
 
       updateSequenceBlockText: function (data) {
         if (this.isFlowchart || !data || !data.blockId) return;
+        var nextText = String(data.text || '').trim();
         this._snapshot();
         this._updateSequenceModel({
-          statements: SequenceStatementUtils.updateBlockText(this.model, data.blockId, data.text || '')
+          statements: nextText
+            ? SequenceStatementUtils.updateBlockText(this.model, data.blockId, nextText)
+            : SequenceStatementUtils.deleteBlock(this.model, data.blockId)
         });
       },
 

@@ -46,7 +46,9 @@
 
     if (statement.type === 'note') {
       var parts = (statement.participants || []).join(', ');
-      return renderIndented(level || 0, 'note over ' + parts + (statement.text ? ': ' + statement.text : ''));
+      var text = String(statement.text || '').trim();
+      if (!parts || !text) return '';
+      return renderIndented(level || 0, 'note over ' + parts + ': ' + text);
     }
 
     if (statement.type === 'raw') {
