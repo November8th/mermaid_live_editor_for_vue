@@ -2,9 +2,9 @@
  * ModelDiagnostics
  * raw script와 parsed model을 비교해 사용자가 인지해야 할 경고 문구를 만든다.
  *
- * 현재는 "예약 ID 누락 경고" 한 종류만 제공한다:
+ * 현재는 두 종류의 보호 신호를 합쳐서 보여준다:
  *   - script에는 N12 / P3 같은 예약 ID가 있는데 parser가 model에 반영하지 못한 경우
- *   - unsupported 문법 때문에 GUI 동기화가 끊겼을 가능성을 사용자에게 알려준다.
+ *   - sequence parser가 일부 줄을 raw fallback으로 보존했거나 block 균형 이상을 감지한 경우
  *
  * StorageManager 스타일의 stateless plain object.
  */
@@ -45,6 +45,36 @@
     return count;
   }
 
+  function buildSequenceFallbackParts(parsed) {
+    var diagnostics = parsed && parsed.type === 'sequenceDiagram' ? (parsed.diagnostics || {}) : null;
+    var parts = [];
+    if (!diagnostics) return parts;
+
+    if (diagnostics.rawStatementCount) {
+      parts.push('지원하지 않는 sequence 구문 ' + diagnostics.rawStatementCount + '줄 raw 보존');
+    }
+    if (diagnostics.orphanEndCount) {
+      parts.push('짝 없는 end ' + diagnostics.orphanEndCount + '건 raw 보존');
+    }
+    if (diagnostics.unmatchedBlockCount) {
+      parts.push('닫히지 않은 block ' + diagnostics.unmatchedBlockCount + '건 감지');
+    }
+
+    return parts;
+  }
+
+  function buildFlowchartFallbackParts(parsed) {
+    var diagnostics = parsed && parsed.type === 'flowchart' ? (parsed.diagnostics || {}) : null;
+    var parts = [];
+    if (!diagnostics) return parts;
+
+    if (diagnostics.rawStatementCount) {
+      parts.push('지원하지 않는 flowchart 구문 ' + diagnostics.rawStatementCount + '줄 raw 보존');
+    }
+
+    return parts;
+  }
+
   // script ↔ parsed model 비교 후 경고 문자열 반환 (없으면 빈 문자열).
   function reservedIdWarning(script, parsed) {
     if (!parsed) return '';
@@ -54,13 +84,13 @@
     var parsedParticipantIds = collectModelIds(parsed.participants || [], 'P');
     var missingNodeCount = countMissingIds(reservedNodeIds, parsedNodeIds);
     var missingParticipantCount = countMissingIds(reservedParticipantIds, parsedParticipantIds);
+    var parts = buildSequenceFallbackParts(parsed).concat(buildFlowchartFallbackParts(parsed));
 
-    if (!missingNodeCount && !missingParticipantCount) return '';
+    if (missingNodeCount) parts.push('N ID ' + missingNodeCount + '개 누락 추정');
+    if (missingParticipantCount) parts.push('P ID ' + missingParticipantCount + '개 누락 추정');
+    if (!parts.length) return '';
 
-    var parts = [];
-    if (missingNodeCount) parts.push('N ID ' + missingNodeCount + '개');
-    if (missingParticipantCount) parts.push('P ID ' + missingParticipantCount + '개');
-    return '일부 Mermaid 요소가 GUI parser에 완전히 반영되지 않았을 수 있습니다. 누락 추정: ' + parts.join(', ');
+    return parts.join(', ') + ' 중';
   }
 
   global.ModelDiagnostics = {

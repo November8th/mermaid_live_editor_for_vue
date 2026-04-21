@@ -268,6 +268,8 @@ Vue.component('mermaid-live-editor', {
         <mermaid-editor\
           :value="script"\
           :error="error"\
+          :warning="parseWarning"\
+          :highlight-targets="(model.diagnostics && model.diagnostics.rawTargets) || []"\
           :diagram-type="model.type"\
           @input="onScriptChange"\
         ></mermaid-editor>\

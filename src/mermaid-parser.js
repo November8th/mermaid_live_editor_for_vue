@@ -233,19 +233,35 @@
     }
   }
 
+  function countSourceOccurrence(model, line) {
+    return ParserHighlight.nextOccurrence(model._sourceTextCounts, line);
+  }
+
+  function pushRawTarget(model, line, lineNumber, reason, sourceInfo) {
+    if (!model._diagnostics) return;
+    model._diagnostics.rawStatementCount++;
+    model._diagnostics.rawTargets.push({
+      lineNumber: lineNumber || null,
+      text: sourceInfo ? sourceInfo.text : String(line || '').trim(),
+      occurrence: sourceInfo ? sourceInfo.occurrence : 1,
+      reason: reason || 'unsupported'
+    });
+  }
+
   function parseFlowLine(line, model) {
     line = line.trim();
-    if (!line) return;
+    if (!line) return true;
 
     var remaining = line;
     var prevNodeId = null;
+    var consumedAny = false;
 
     while (remaining.length > 0) {
       remaining = remaining.trim();
-      if (!remaining) break;
+      if (!remaining) return true;
 
       var node = parseNodeDef(remaining);
-      if (!node) break;
+      if (!node) return false;
 
       var restAfterNode = remaining.substring(node.endIndex).trim();
       // Mermaid allows a left-side x/o head to sit right next to the source node.
@@ -263,9 +279,11 @@
         var nodeObj = { id: node.id, text: node.text, shape: node.shape };
         model.nodes.push(nodeObj);
         model._nodeMap[node.id] = nodeObj;
+        consumedAny = true;
       } else if (node.text !== node.id || node.shape !== 'rect') {
         model._nodeMap[node.id].text = node.text;
         model._nodeMap[node.id].shape = node.shape;
+        consumedAny = true;
       }
 
       remaining = restAfterNode;
@@ -278,6 +296,7 @@
           type: model._pendingEdge.type
         });
         model._pendingEdge = null;
+        consumedAny = true;
       }
 
       var edge = parseEdge(remaining);
@@ -285,12 +304,15 @@
         model._pendingEdge = edge;
         prevNodeId = node.id;
         remaining = remaining.substring(edge.endIndex).trim();
+        consumedAny = true;
       } else {
         prevNodeId = null;
         model._pendingEdge = null;
-        break;
+        return !remaining;
       }
     }
+
+    return consumedAny;
   }
 
   function parseMermaid(script) {
@@ -310,15 +332,28 @@
       nodes: [],
       edges: [],
       _nodeMap: {},
-      _pendingEdge: null
+      _pendingEdge: null,
+      _sourceTextCounts: {},
+      diagnostics: {
+        rawStatementCount: 0,
+        rawTargets: []
+      },
+      _diagnostics: {
+        rawStatementCount: 0,
+        rawTargets: []
+      }
     };
     var started = false;
 
     for (var i = 0; i < lines.length; i++) {
       var line = lines[i].trim();
+      var sourceInfo = countSourceOccurrence(model, line);
 
       if (!line || line.indexOf('%%') === 0) continue;
-      if (line.indexOf('classDef') === 0 || line.indexOf('class ') === 0) continue;
+      if (line.indexOf('classDef') === 0 || line.indexOf('class ') === 0) {
+        pushRawTarget(model, line, i + 1, 'class', sourceInfo);
+        continue;
+      }
 
       if (line.indexOf('style ') === 0) {
         parseStyleLine(line, model);
@@ -345,13 +380,24 @@
       }
 
       if (!started) continue;
-      if (line.indexOf('subgraph') === 0 || line === 'end') continue;
+      if (line.indexOf('subgraph') === 0 || line === 'end') {
+        pushRawTarget(model, line, i + 1, 'subgraph', sourceInfo);
+        continue;
+      }
 
-      parseFlowLine(line, model);
+      if (!parseFlowLine(line, model)) {
+        pushRawTarget(model, line, i + 1, 'flow-line', sourceInfo);
+      }
     }
 
+    model.diagnostics = {
+      rawStatementCount: model._diagnostics.rawStatementCount,
+      rawTargets: model._diagnostics.rawTargets.slice()
+    };
     delete model._nodeMap;
     delete model._pendingEdge;
+    delete model._sourceTextCounts;
+    delete model._diagnostics;
 
     return model;
   }

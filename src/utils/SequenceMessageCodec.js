@@ -15,12 +15,12 @@
 
   // UI 라벨 목록 (MermaidPreview sequence-toolbar 드롭다운)
   var LINE_TYPE_OPTIONS = [
-    { operator: '->>',  label: '───▶' },
-    { operator: '-->>',  label: '···▶' },
+    { operator: '->>',  label: '───>' },
+    { operator: '-->>',  label: '···>' },
     { operator: '->',   label: '───'  },
     { operator: '-->',  label: '···'  },
-    { operator: '-x',   label: '───x' },
-    { operator: '--x',  label: '···x' },
+    { operator: '-x',   label: '───X' },
+    { operator: '--x',  label: '···X' },
     { operator: '-)',   label: '───)' },
     { operator: '--)',  label: '···)' }
   ];

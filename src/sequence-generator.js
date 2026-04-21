@@ -44,6 +44,10 @@
       return renderIndented(level || 0, statement.type + (statement.text ? ' ' + statement.text : ''));
     }
 
+    if (statement.type === 'raw') {
+      return renderIndented(level || 0, statement.raw || '');
+    }
+
     return '';
   }
 
@@ -94,7 +98,12 @@
         var statement = statements[j];
         var line = '';
         var level = depth;
-        if (statement && (statement.type === 'else' || statement.type === 'and' || statement.type === 'end')) {
+        if (statement && (
+          statement.type === 'else' ||
+          statement.type === 'and' ||
+          statement.type === 'end' ||
+          statement.blockRole === 'close'
+        )) {
           level = Math.max(0, depth - 1);
         }
         if (statement && statement.type === 'message') {
@@ -104,11 +113,11 @@
           line = renderStatement(statement, null, level);
         }
 
-        if (statement && /^(loop|alt|opt|par)$/.test(statement.type)) {
+        if (statement && (/^(loop|alt|opt|par)$/.test(statement.type) || statement.blockRole === 'open')) {
           depth++;
         } else if (statement && /^(else|and)$/.test(statement.type)) {
           depth = level + 1;
-        } else if (statement && statement.type === 'end') {
+        } else if (statement && (statement.type === 'end' || statement.blockRole === 'close')) {
           depth = level;
         }
 

@@ -161,6 +161,7 @@ Vue.component('mermaid-full-editor', {
           :value="script"\
           :error="error"\
           :warning="parseWarning"\
+          :highlight-targets="(model.diagnostics && model.diagnostics.rawTargets) || []"\
           :diagram-type="model.type"\
           @input="onScriptChange"\
         ></mermaid-editor>\

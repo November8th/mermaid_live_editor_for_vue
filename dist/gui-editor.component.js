@@ -1,6 +1,6 @@
 /**
  * gui-editor.component.js
- * Built: 2026-04-21T01:03:03.805Z
+ * Built: 2026-04-21T02:15:37.417Z
  *
  * Concatenation of gui-editor source files (no minification).
  * Requires global Vue 2 and Mermaid loaded separately.
@@ -32,8 +32,8 @@
 
   // UI 라벨 목록 (MermaidPreview sequence-toolbar 드롭다운)
   var LINE_TYPE_OPTIONS = [
-    { operator: '->>',  label: '───▶' },
-    { operator: '-->>',  label: '···▶' },
+    { operator: '->>',  label: '───>' },
+    { operator: '-->>',  label: '···>' },
     { operator: '->',   label: '───'  },
     { operator: '-->',  label: '···'  },
     { operator: '-x',   label: '───x' },
@@ -185,9 +185,9 @@
  * ModelDiagnostics
  * raw script와 parsed model을 비교해 사용자가 인지해야 할 경고 문구를 만든다.
  *
- * 현재는 "예약 ID 누락 경고" 한 종류만 제공한다:
+ * 현재는 두 종류의 보호 신호를 합쳐서 보여준다:
  *   - script에는 N12 / P3 같은 예약 ID가 있는데 parser가 model에 반영하지 못한 경우
- *   - unsupported 문법 때문에 GUI 동기화가 끊겼을 가능성을 사용자에게 알려준다.
+ *   - sequence parser가 일부 줄을 raw fallback으로 보존했거나 block 균형 이상을 감지한 경우
  *
  * StorageManager 스타일의 stateless plain object.
  */
@@ -228,6 +228,36 @@
     return count;
   }
 
+  function buildSequenceFallbackParts(parsed) {
+    var diagnostics = parsed && parsed.type === 'sequenceDiagram' ? (parsed.diagnostics || {}) : null;
+    var parts = [];
+    if (!diagnostics) return parts;
+
+    if (diagnostics.rawStatementCount) {
+      parts.push('지원하지 않는 sequence 구문 ' + diagnostics.rawStatementCount + '줄 raw 보존');
+    }
+    if (diagnostics.orphanEndCount) {
+      parts.push('짝 없는 end ' + diagnostics.orphanEndCount + '건 raw 보존');
+    }
+    if (diagnostics.unmatchedBlockCount) {
+      parts.push('닫히지 않은 block ' + diagnostics.unmatchedBlockCount + '건 감지');
+    }
+
+    return parts;
+  }
+
+  function buildFlowchartFallbackParts(parsed) {
+    var diagnostics = parsed && parsed.type === 'flowchart' ? (parsed.diagnostics || {}) : null;
+    var parts = [];
+    if (!diagnostics) return parts;
+
+    if (diagnostics.rawStatementCount) {
+      parts.push('지원하지 않는 flowchart 구문 ' + diagnostics.rawStatementCount + '줄 raw 보존');
+    }
+
+    return parts;
+  }
+
   // script ↔ parsed model 비교 후 경고 문자열 반환 (없으면 빈 문자열).
   function reservedIdWarning(script, parsed) {
     if (!parsed) return '';
@@ -237,17 +267,79 @@
     var parsedParticipantIds = collectModelIds(parsed.participants || [], 'P');
     var missingNodeCount = countMissingIds(reservedNodeIds, parsedNodeIds);
     var missingParticipantCount = countMissingIds(reservedParticipantIds, parsedParticipantIds);
+    var parts = buildSequenceFallbackParts(parsed).concat(buildFlowchartFallbackParts(parsed));
 
-    if (!missingNodeCount && !missingParticipantCount) return '';
+    if (missingNodeCount) parts.push('N ID ' + missingNodeCount + '개 누락 추정');
+    if (missingParticipantCount) parts.push('P ID ' + missingParticipantCount + '개 누락 추정');
+    if (!parts.length) return '';
 
-    var parts = [];
-    if (missingNodeCount) parts.push('N ID ' + missingNodeCount + '개');
-    if (missingParticipantCount) parts.push('P ID ' + missingParticipantCount + '개');
-    return '일부 Mermaid 요소가 GUI parser에 완전히 반영되지 않았을 수 있습니다. 누락 추정: ' + parts.join(', ');
+    return parts.join(', ') + ' 중';
   }
 
   global.ModelDiagnostics = {
     reservedIdWarning: reservedIdWarning
+  };
+
+})(typeof window !== 'undefined' ? window : this);
+
+
+/* ===== src/utils/ParserHighlight.js ===== */
+/**
+ * ParserHighlight
+ * parser가 수집한 raw highlight target을 textarea 줄에 다시 매핑하는 공통 유틸.
+ *
+ * 역할:
+ * - source 전체에서 같은 text가 몇 번째 등장인지 계산
+ * - highlight target 목록을 현재 script 기준 line map으로 변환
+ */
+(function (global) {
+  'use strict';
+
+  function normalizeLineText(line) {
+    return String(line || '').trim();
+  }
+
+  function nextOccurrence(counterMap, line) {
+    var key = normalizeLineText(line) || '__empty__';
+    var next = (counterMap[key] || 0) + 1;
+    counterMap[key] = next;
+    return {
+      text: normalizeLineText(line),
+      occurrence: next
+    };
+  }
+
+  function buildHighlightLineMap(script, targets) {
+    var map = {};
+    var list = targets || [];
+    if (!list.length) return map;
+
+    var targetCounts = {};
+    for (var i = 0; i < list.length; i++) {
+      var target = list[i] || {};
+      var key = normalizeLineText(target.text) || '__empty__';
+      var occ = target.occurrence || 1;
+      if (!targetCounts[key]) targetCounts[key] = {};
+      targetCounts[key][occ] = true;
+    }
+
+    var lines = String(script || '').split('\n');
+    var seenCounts = {};
+    for (var j = 0; j < lines.length; j++) {
+      var lineKey = normalizeLineText(lines[j]) || '__empty__';
+      var lineOccurrence = (seenCounts[lineKey] || 0) + 1;
+      seenCounts[lineKey] = lineOccurrence;
+      if (targetCounts[lineKey] && targetCounts[lineKey][lineOccurrence]) {
+        map[j + 1] = true;
+      }
+    }
+    return map;
+  }
+
+  global.ParserHighlight = {
+    normalizeLineText: normalizeLineText,
+    nextOccurrence: nextOccurrence,
+    buildHighlightLineMap: buildHighlightLineMap
   };
 
 })(typeof window !== 'undefined' ? window : this);
@@ -263,6 +355,51 @@
   'use strict';
 
   var MESSAGE_RE = SequenceMessageCodec.MESSAGE_RE;
+  var BLOCK_OPEN_RE = /^(loop|alt|opt|par)(?:\s+(.+))?$/i;
+  var RAW_BLOCK_OPEN_RE = /^(rect|critical|break|box)\b(?:\s+(.+))?$/i;
+
+  function pushBlock(model, kind, recognized) {
+    model._blockStack.push({
+      kind: String(kind || '').toLowerCase(),
+      recognized: recognized !== false
+    });
+  }
+
+  function popBlock(model) {
+    return model._blockStack.length ? model._blockStack.pop() : null;
+  }
+
+  function getBlockTop(model) {
+    return model._blockStack.length ? model._blockStack[model._blockStack.length - 1] : null;
+  }
+
+  function countSourceOccurrence(model, line) {
+    return ParserHighlight.nextOccurrence(model._sourceTextCounts, line);
+  }
+
+  function pushRawStatement(model, line, blockRole, lineNumber, sourceInfo) {
+    var rawText = sourceInfo ? sourceInfo.text : String(line || '').trim();
+    var occurrence = sourceInfo ? sourceInfo.occurrence : 1;
+    model.statements.push({
+      type: 'raw',
+      raw: line,
+      blockRole: blockRole || '',
+      lineNumber: lineNumber || null,
+      rawText: rawText,
+      occurrence: occurrence
+    });
+    model._diagnostics.rawStatementCount++;
+    if (lineNumber && !model._diagnostics.rawLineMap[lineNumber]) {
+    model._diagnostics.rawLineMap[lineNumber] = true;
+      model._diagnostics.rawLineNumbers.push(lineNumber);
+    }
+    model._diagnostics.rawTargets.push({
+      lineNumber: lineNumber || null,
+      text: rawText,
+      occurrence: occurrence,
+      blockRole: blockRole || ''
+    });
+  }
 
   function ensureParticipant(model, id, label) {
     if (!id || model._participantMap[id]) return;
@@ -321,9 +458,10 @@
     return true;
   }
 
-  function parseControlLine(line, model) {
-    var match = line.match(/^(loop|alt|else|opt|par|and)(?:\s+(.+))?$/i);
+  function parseControlLine(line, model, lineNumber, sourceInfo) {
+    var match = line.match(BLOCK_OPEN_RE);
     if (match) {
+      pushBlock(model, match[1], true);
       model.statements.push({
         type: match[1].toLowerCase(),
         text: (match[2] || '').trim()
@@ -331,8 +469,41 @@
       return true;
     }
 
+    match = line.match(/^(else|and)(?:\s+(.+))?$/i);
+    if (match) {
+      var branchType = match[1].toLowerCase();
+      var top = getBlockTop(model);
+      var expected = branchType === 'else' ? 'alt' : 'par';
+      if (top && top.recognized && top.kind === expected) {
+        model.statements.push({
+          type: branchType,
+          text: (match[2] || '').trim()
+        });
+      } else {
+        pushRawStatement(model, line, '', lineNumber, sourceInfo);
+      }
+      return true;
+    }
+
+    match = line.match(RAW_BLOCK_OPEN_RE);
+    if (match) {
+      pushBlock(model, match[1], false);
+      pushRawStatement(model, line, 'open', lineNumber, sourceInfo);
+      return true;
+    }
+
     if (/^end$/i.test(line)) {
-      model.statements.push({ type: 'end' });
+      var ended = popBlock(model);
+      if (!ended) {
+        pushRawStatement(model, line, 'close', lineNumber, sourceInfo);
+        model._diagnostics.orphanEndCount++;
+        return true;
+      }
+      if (ended.recognized) {
+        model.statements.push({ type: 'end' });
+      } else {
+        pushRawStatement(model, line, 'close', lineNumber, sourceInfo);
+      }
       return true;
     }
 
@@ -347,8 +518,16 @@
         participants: [],
         messages: [],
         statements: [],
-        nodes: [],
-        edges: []
+        diagnostics: {
+          rawStatementCount: 0,
+          orphanEndCount: 0,
+          unmatchedBlockCount: 0,
+          rawLineNumbers: [],
+          rawTargets: []
+        },
+      nodes: [],
+      edges: [],
+      _sourceTextCounts: {}
       };
     }
 
@@ -359,9 +538,26 @@
       participants: [],
       messages: [],
       statements: [],
+      diagnostics: {
+        rawStatementCount: 0,
+        orphanEndCount: 0,
+        unmatchedBlockCount: 0,
+        rawLineNumbers: [],
+        rawTargets: []
+      },
       nodes: [],
       edges: [],
-      _participantMap: {}
+      _participantMap: {},
+      _blockStack: [],
+      _sourceTextCounts: {},
+      _diagnostics: {
+        rawStatementCount: 0,
+        orphanEndCount: 0,
+        unmatchedBlockCount: 0,
+        rawLineNumbers: [],
+        rawLineMap: {},
+        rawTargets: []
+      }
     };
     var started = false;
 
@@ -376,14 +572,27 @@
         continue;
       }
 
+      var sourceInfo = countSourceOccurrence(model, line);
       if (line === 'autonumber') { model.autonumber = true; continue; }
       if (parseParticipantLine(line, model)) continue;
       if (parseMessageLine(line, model)) continue;
       if (parseActivationLine(line, model)) continue;
-      if (parseControlLine(line, model)) continue;
+      if (parseControlLine(line, model, i + 1, sourceInfo)) continue;
+      pushRawStatement(model, line, '', i + 1, sourceInfo);
     }
 
+    model._diagnostics.unmatchedBlockCount = model._blockStack.length;
+    model.diagnostics = {
+      rawStatementCount: model._diagnostics.rawStatementCount,
+      orphanEndCount: model._diagnostics.orphanEndCount,
+      unmatchedBlockCount: model._diagnostics.unmatchedBlockCount,
+      rawLineNumbers: model._diagnostics.rawLineNumbers.slice(),
+      rawTargets: model._diagnostics.rawTargets.slice()
+    };
     delete model._participantMap;
+    delete model._blockStack;
+    delete model._sourceTextCounts;
+    delete model._diagnostics;
     return model;
   }
 
@@ -441,6 +650,10 @@
       return renderIndented(level || 0, statement.type + (statement.text ? ' ' + statement.text : ''));
     }
 
+    if (statement.type === 'raw') {
+      return renderIndented(level || 0, statement.raw || '');
+    }
+
     return '';
   }
 
@@ -491,7 +704,12 @@
         var statement = statements[j];
         var line = '';
         var level = depth;
-        if (statement && (statement.type === 'else' || statement.type === 'and' || statement.type === 'end')) {
+        if (statement && (
+          statement.type === 'else' ||
+          statement.type === 'and' ||
+          statement.type === 'end' ||
+          statement.blockRole === 'close'
+        )) {
           level = Math.max(0, depth - 1);
         }
         if (statement && statement.type === 'message') {
@@ -501,11 +719,11 @@
           line = renderStatement(statement, null, level);
         }
 
-        if (statement && /^(loop|alt|opt|par)$/.test(statement.type)) {
+        if (statement && (/^(loop|alt|opt|par)$/.test(statement.type) || statement.blockRole === 'open')) {
           depth++;
         } else if (statement && /^(else|and)$/.test(statement.type)) {
           depth = level + 1;
-        } else if (statement && statement.type === 'end') {
+        } else if (statement && (statement.type === 'end' || statement.blockRole === 'close')) {
           depth = level;
         }
 
@@ -943,19 +1161,35 @@
     }
   }
 
+  function countSourceOccurrence(model, line) {
+    return ParserHighlight.nextOccurrence(model._sourceTextCounts, line);
+  }
+
+  function pushRawTarget(model, line, lineNumber, reason, sourceInfo) {
+    if (!model._diagnostics) return;
+    model._diagnostics.rawStatementCount++;
+    model._diagnostics.rawTargets.push({
+      lineNumber: lineNumber || null,
+      text: sourceInfo ? sourceInfo.text : String(line || '').trim(),
+      occurrence: sourceInfo ? sourceInfo.occurrence : 1,
+      reason: reason || 'unsupported'
+    });
+  }
+
   function parseFlowLine(line, model) {
     line = line.trim();
-    if (!line) return;
+    if (!line) return true;
 
     var remaining = line;
     var prevNodeId = null;
+    var consumedAny = false;
 
     while (remaining.length > 0) {
       remaining = remaining.trim();
-      if (!remaining) break;
+      if (!remaining) return true;
 
       var node = parseNodeDef(remaining);
-      if (!node) break;
+      if (!node) return false;
 
       var restAfterNode = remaining.substring(node.endIndex).trim();
       // Mermaid allows a left-side x/o head to sit right next to the source node.
@@ -973,9 +1207,11 @@
         var nodeObj = { id: node.id, text: node.text, shape: node.shape };
         model.nodes.push(nodeObj);
         model._nodeMap[node.id] = nodeObj;
+        consumedAny = true;
       } else if (node.text !== node.id || node.shape !== 'rect') {
         model._nodeMap[node.id].text = node.text;
         model._nodeMap[node.id].shape = node.shape;
+        consumedAny = true;
       }
 
       remaining = restAfterNode;
@@ -988,6 +1224,7 @@
           type: model._pendingEdge.type
         });
         model._pendingEdge = null;
+        consumedAny = true;
       }
 
       var edge = parseEdge(remaining);
@@ -995,12 +1232,15 @@
         model._pendingEdge = edge;
         prevNodeId = node.id;
         remaining = remaining.substring(edge.endIndex).trim();
+        consumedAny = true;
       } else {
         prevNodeId = null;
         model._pendingEdge = null;
-        break;
+        return !remaining;
       }
     }
+
+    return consumedAny;
   }
 
   function parseMermaid(script) {
@@ -1020,15 +1260,28 @@
       nodes: [],
       edges: [],
       _nodeMap: {},
-      _pendingEdge: null
+      _pendingEdge: null,
+      _sourceTextCounts: {},
+      diagnostics: {
+        rawStatementCount: 0,
+        rawTargets: []
+      },
+      _diagnostics: {
+        rawStatementCount: 0,
+        rawTargets: []
+      }
     };
     var started = false;
 
     for (var i = 0; i < lines.length; i++) {
       var line = lines[i].trim();
+      var sourceInfo = countSourceOccurrence(model, line);
 
       if (!line || line.indexOf('%%') === 0) continue;
-      if (line.indexOf('classDef') === 0 || line.indexOf('class ') === 0) continue;
+      if (line.indexOf('classDef') === 0 || line.indexOf('class ') === 0) {
+        pushRawTarget(model, line, i + 1, 'class', sourceInfo);
+        continue;
+      }
 
       if (line.indexOf('style ') === 0) {
         parseStyleLine(line, model);
@@ -1055,13 +1308,24 @@
       }
 
       if (!started) continue;
-      if (line.indexOf('subgraph') === 0 || line === 'end') continue;
+      if (line.indexOf('subgraph') === 0 || line === 'end') {
+        pushRawTarget(model, line, i + 1, 'subgraph', sourceInfo);
+        continue;
+      }
 
-      parseFlowLine(line, model);
+      if (!parseFlowLine(line, model)) {
+        pushRawTarget(model, line, i + 1, 'flow-line', sourceInfo);
+      }
     }
 
+    model.diagnostics = {
+      rawStatementCount: model._diagnostics.rawStatementCount,
+      rawTargets: model._diagnostics.rawTargets.slice()
+    };
     delete model._nodeMap;
     delete model._pendingEdge;
+    delete model._sourceTextCounts;
+    delete model._diagnostics;
 
     return model;
   }
@@ -4106,12 +4370,15 @@ Vue.component('mermaid-editor', {
     value: { type: String, default: '' },
     error: { type: String, default: '' },
     warning: { type: String, default: '' },
+    highlightTargets: { type: Array, default: function () { return []; } },
     diagramType: { type: String, default: 'flowchart' }
   },
   data: function () {
     return {
       localValue: this.value,
-      debounceTimer: null
+      debounceTimer: null,
+      scrollTop: 0,
+      scrollLeft: 0
     };
   },
   watch: {
@@ -4122,6 +4389,31 @@ Vue.component('mermaid-editor', {
     }
   },
   computed: {
+    hasHighlights: function () {
+      return !!(this.highlightTargets && this.highlightTargets.length);
+    },
+    highlightedLineMap: function () {
+      return ParserHighlight.buildHighlightLineMap(this.localValue, this.highlightTargets);
+    },
+    highlightTransformStyle: function () {
+      return {
+        transform: 'translate(' + (-this.scrollLeft) + 'px, ' + (-this.scrollTop) + 'px)'
+      };
+    },
+    highlightHtml: function () {
+      var lines = String(this.localValue || '').split('\n');
+      if (!lines.length) lines = [''];
+      var html = [];
+      for (var i = 0; i < lines.length; i++) {
+        var line = lines[i];
+        var escaped = this._escapeHtml(line || ' ');
+        var cls = this.highlightedLineMap[i + 1]
+          ? 'code-editor__highlight-line code-editor__highlight-line--active'
+          : 'code-editor__highlight-line';
+        html.push('<span class="' + cls + '">' + escaped + '</span>');
+      }
+      return html.join('');
+    },
     placeholderText: function () {
       if (this.diagramType === 'sequenceDiagram') {
         return 'sequenceDiagram\n    Alice->>+John: Hello John, how are you?\n    John-->>-Alice: Hi Alice, I can hear you!';
@@ -4155,19 +4447,36 @@ Vue.component('mermaid-editor', {
         this.localValue = textarea.value;
         this.$emit('input', this.localValue);
       }
+    },
+    onScroll: function (e) {
+      this.scrollTop = e.target.scrollTop || 0;
+      this.scrollLeft = e.target.scrollLeft || 0;
+    },
+    _escapeHtml: function (text) {
+      return String(text)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
     }
   },
   template: '\
     <div class="panel panel--editor">\
       <div class="code-editor">\
+        <div class="code-editor__stack">\
+          <div v-if="hasHighlights" class="code-editor__highlight-layer" aria-hidden="true">\
+            <pre class="code-editor__highlight-content" :style="highlightTransformStyle" v-html="highlightHtml"></pre>\
+          </div>\
         <textarea\
+          ref="textarea"\
           class="code-editor__textarea"\
           :value="localValue"\
           @input="onInput"\
           @keydown="onKeyDown"\
+          @scroll="onScroll"\
           :placeholder="placeholderText"\
           spellcheck="false"\
         ></textarea>\
+        </div>\
         <div v-if="error" class="code-editor__error">\
           <span>!</span><span>{{ error }}</span>\
         </div>\
@@ -5253,6 +5562,24 @@ Vue.component('mermaid-preview', {
       return edge && edge.color ? edge.color : '';
     },
 
+    getSequenceMessageLineType: function () {
+      if (!this.sequenceToolbar || this.sequenceToolbar.type !== 'message') {
+        return SequenceMessageCodec.DEFAULT_OPERATOR;
+      }
+      var message = (this.model.messages || [])[this.sequenceToolbar.index];
+      var parsed = SequenceMessageCodec.parseOperator(message && message.operator);
+      return parsed.base || SequenceMessageCodec.DEFAULT_OPERATOR;
+    },
+
+    getSequenceMessageLineTypeLabel: function () {
+      var current = this.getSequenceMessageLineType();
+      var options = this.$options.LINE_TYPE_OPTIONS || [];
+      for (var i = 0; i < options.length; i++) {
+        if (options[i].operator === current) return options[i].label;
+      }
+      return '───▶';
+    },
+
     getAvailableFlowEdgeHeadOptions: function () {
       return this.$options.FLOW_EDGE_HEAD_OPTIONS || [];
     },
@@ -5412,14 +5739,13 @@ Vue.component('mermaid-preview', {
 
     sequenceToolbarToggleLineType: function () {
       if (!this.sequenceToolbar || this.sequenceToolbar.type !== 'message') return;
-      this.lineTypePicker = true;
+      this.lineTypePicker = !this.lineTypePicker;
     },
 
     sequenceToolbarSelectLineType: function (operator) {
       if (!this.sequenceToolbar || this.sequenceToolbar.type !== 'message') return;
       this.$emit('set-sequence-message-line-type', { index: this.sequenceToolbar.index, operator: operator });
       this.lineTypePicker = false;
-      this.sequenceToolbar = null;
     },
 
     sequenceToolbarToggleKind: function () {
@@ -5574,25 +5900,27 @@ Vue.component('mermaid-preview', {
           <button class="edge-toolbar__btn edge-toolbar__btn--danger" @click="edgeToolbarDelete" title="Delete edge">Delete</button>\
         </div>\
         <div v-if="sequenceToolbar" class="sequence-toolbar" :style="{ left: sequenceToolbar.x + &quot;px&quot;, top: sequenceToolbar.y + &quot;px&quot; }" @click.stop>\
-          <template v-if="lineTypePicker">\
-            <button\
-              v-for="opt in $options.LINE_TYPE_OPTIONS"\
-              :key="opt.operator"\
-              class="edge-toolbar__btn edge-toolbar__btn--line-opt"\
-              :title="opt.desc"\
-              @click="sequenceToolbarSelectLineType(opt.operator)"\
-            >{{ opt.label }}</button>\
-            <button class="edge-toolbar__btn" @click="lineTypePicker = false">✕</button>\
-          </template>\
-          <template v-else>\
-            <button class="edge-toolbar__btn" @click="sequenceToolbarEdit">Edit</button>\
-            <button v-if="sequenceToolbar.type === &quot;participant&quot;" class="edge-toolbar__btn" @click="sequenceToolbarMoveLeft" title="Move left">◀</button>\
-            <button v-if="sequenceToolbar.type === &quot;participant&quot;" class="edge-toolbar__btn" @click="sequenceToolbarMoveRight" title="Move right">▶</button>\
-            <button v-if="sequenceToolbar.type === &quot;participant&quot;" class="edge-toolbar__btn" @click="sequenceToolbarToggleKind">{{ sequenceToolbar.kind === &quot;actor&quot; ? &quot;→ Participant&quot; : &quot;→ Actor&quot; }}</button>\
-            <button v-if="sequenceToolbar.type === &quot;message&quot;" class="edge-toolbar__btn" @click="sequenceToolbarReverse">Reverse</button>\
-            <button v-if="sequenceToolbar.type === &quot;message&quot;" class="edge-toolbar__btn" @click.stop="sequenceToolbarToggleLineType">Line</button>\
-            <button class="edge-toolbar__btn edge-toolbar__btn--danger" @click="sequenceToolbarDelete">Delete</button>\
-          </template>\
+          <button class="edge-toolbar__btn" @click="sequenceToolbarEdit">Label ✎</button>\
+          <button v-if="sequenceToolbar.type === &quot;participant&quot;" class="edge-toolbar__btn" @click="sequenceToolbarMoveLeft" title="Move left">◀</button>\
+          <button v-if="sequenceToolbar.type === &quot;participant&quot;" class="edge-toolbar__btn" @click="sequenceToolbarMoveRight" title="Move right">▶</button>\
+          <button v-if="sequenceToolbar.type === &quot;participant&quot;" class="edge-toolbar__btn" @click="sequenceToolbarToggleKind">{{ sequenceToolbar.kind === &quot;actor&quot; ? &quot;→ Participant&quot; : &quot;→ Actor&quot; }}</button>\
+          <button v-if="sequenceToolbar.type === &quot;message&quot;" class="edge-toolbar__btn" @click="sequenceToolbarReverse">Reverse</button>\
+          <div v-if="sequenceToolbar.type === &quot;message&quot;" class="edge-toolbar__type-group">\
+            <button class="edge-toolbar__type-trigger" :class="{ \'edge-toolbar__type-trigger--open\': lineTypePicker }" @click.stop="sequenceToolbarToggleLineType" title="Line type">\
+              <span class="edge-toolbar__type-glyph edge-toolbar__type-glyph--body">{{ getSequenceMessageLineTypeLabel() }}</span>\
+              <span class="edge-toolbar__type-caret">⌄</span>\
+            </button>\
+            <div v-if="lineTypePicker" class="edge-toolbar__type-menu edge-toolbar__type-menu--body">\
+              <button\
+                v-for="opt in $options.LINE_TYPE_OPTIONS"\
+                :key="opt.operator"\
+                class="edge-toolbar__type-option edge-toolbar__btn--line-opt"\
+                :class="{ \'edge-toolbar__type-option--selected\': getSequenceMessageLineType() === opt.operator }"\
+                @click="sequenceToolbarSelectLineType(opt.operator)"\
+              >{{ opt.label }}</button>\
+            </div>\
+          </div>\
+          <button class="edge-toolbar__btn edge-toolbar__btn--danger" @click="sequenceToolbarDelete">Delete</button>\
         </div>\
       </div>\
       <div v-else class="preview-area__empty">\
@@ -5769,6 +6097,7 @@ Vue.component('mermaid-full-editor', {
           :value="script"\
           :error="error"\
           :warning="parseWarning"\
+          :highlight-targets="(model.diagnostics && model.diagnostics.rawTargets) || []"\
           :diagram-type="model.type"\
           @input="onScriptChange"\
         ></mermaid-editor>\

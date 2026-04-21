@@ -873,6 +873,24 @@ Vue.component('mermaid-preview', {
       return edge && edge.color ? edge.color : '';
     },
 
+    getSequenceMessageLineType: function () {
+      if (!this.sequenceToolbar || this.sequenceToolbar.type !== 'message') {
+        return SequenceMessageCodec.DEFAULT_OPERATOR;
+      }
+      var message = (this.model.messages || [])[this.sequenceToolbar.index];
+      var parsed = SequenceMessageCodec.parseOperator(message && message.operator);
+      return parsed.base || SequenceMessageCodec.DEFAULT_OPERATOR;
+    },
+
+    getSequenceMessageLineTypeLabel: function () {
+      var current = this.getSequenceMessageLineType();
+      var options = this.$options.LINE_TYPE_OPTIONS || [];
+      for (var i = 0; i < options.length; i++) {
+        if (options[i].operator === current) return options[i].label;
+      }
+      return '───▶';
+    },
+
     getAvailableFlowEdgeHeadOptions: function () {
       return this.$options.FLOW_EDGE_HEAD_OPTIONS || [];
     },
@@ -1032,14 +1050,13 @@ Vue.component('mermaid-preview', {
 
     sequenceToolbarToggleLineType: function () {
       if (!this.sequenceToolbar || this.sequenceToolbar.type !== 'message') return;
-      this.lineTypePicker = true;
+      this.lineTypePicker = !this.lineTypePicker;
     },
 
     sequenceToolbarSelectLineType: function (operator) {
       if (!this.sequenceToolbar || this.sequenceToolbar.type !== 'message') return;
       this.$emit('set-sequence-message-line-type', { index: this.sequenceToolbar.index, operator: operator });
       this.lineTypePicker = false;
-      this.sequenceToolbar = null;
     },
 
     sequenceToolbarToggleKind: function () {
@@ -1194,25 +1211,27 @@ Vue.component('mermaid-preview', {
           <button class="edge-toolbar__btn edge-toolbar__btn--danger" @click="edgeToolbarDelete" title="Delete edge">Delete</button>\
         </div>\
         <div v-if="sequenceToolbar" class="sequence-toolbar" :style="{ left: sequenceToolbar.x + &quot;px&quot;, top: sequenceToolbar.y + &quot;px&quot; }" @click.stop>\
-          <template v-if="lineTypePicker">\
-            <button\
-              v-for="opt in $options.LINE_TYPE_OPTIONS"\
-              :key="opt.operator"\
-              class="edge-toolbar__btn edge-toolbar__btn--line-opt"\
-              :title="opt.desc"\
-              @click="sequenceToolbarSelectLineType(opt.operator)"\
-            >{{ opt.label }}</button>\
-            <button class="edge-toolbar__btn" @click="lineTypePicker = false">✕</button>\
-          </template>\
-          <template v-else>\
-            <button class="edge-toolbar__btn" @click="sequenceToolbarEdit">Edit</button>\
-            <button v-if="sequenceToolbar.type === &quot;participant&quot;" class="edge-toolbar__btn" @click="sequenceToolbarMoveLeft" title="Move left">◀</button>\
-            <button v-if="sequenceToolbar.type === &quot;participant&quot;" class="edge-toolbar__btn" @click="sequenceToolbarMoveRight" title="Move right">▶</button>\
-            <button v-if="sequenceToolbar.type === &quot;participant&quot;" class="edge-toolbar__btn" @click="sequenceToolbarToggleKind">{{ sequenceToolbar.kind === &quot;actor&quot; ? &quot;→ Participant&quot; : &quot;→ Actor&quot; }}</button>\
-            <button v-if="sequenceToolbar.type === &quot;message&quot;" class="edge-toolbar__btn" @click="sequenceToolbarReverse">Reverse</button>\
-            <button v-if="sequenceToolbar.type === &quot;message&quot;" class="edge-toolbar__btn" @click.stop="sequenceToolbarToggleLineType">Line</button>\
-            <button class="edge-toolbar__btn edge-toolbar__btn--danger" @click="sequenceToolbarDelete">Delete</button>\
-          </template>\
+          <button class="edge-toolbar__btn" @click="sequenceToolbarEdit">Label ✎</button>\
+          <button v-if="sequenceToolbar.type === &quot;participant&quot;" class="edge-toolbar__btn" @click="sequenceToolbarMoveLeft" title="Move left">◀</button>\
+          <button v-if="sequenceToolbar.type === &quot;participant&quot;" class="edge-toolbar__btn" @click="sequenceToolbarMoveRight" title="Move right">▶</button>\
+          <button v-if="sequenceToolbar.type === &quot;participant&quot;" class="edge-toolbar__btn" @click="sequenceToolbarToggleKind">{{ sequenceToolbar.kind === &quot;actor&quot; ? &quot;→ Participant&quot; : &quot;→ Actor&quot; }}</button>\
+          <button v-if="sequenceToolbar.type === &quot;message&quot;" class="edge-toolbar__btn" @click="sequenceToolbarReverse">Reverse</button>\
+          <div v-if="sequenceToolbar.type === &quot;message&quot;" class="edge-toolbar__type-group">\
+            <button class="edge-toolbar__type-trigger" :class="{ \'edge-toolbar__type-trigger--open\': lineTypePicker }" @click.stop="sequenceToolbarToggleLineType" title="Line type">\
+              <span class="edge-toolbar__type-glyph edge-toolbar__type-glyph--body">{{ getSequenceMessageLineTypeLabel() }}</span>\
+              <span class="edge-toolbar__type-caret">⌄</span>\
+            </button>\
+            <div v-if="lineTypePicker" class="edge-toolbar__type-menu edge-toolbar__type-menu--body">\
+              <button\
+                v-for="opt in $options.LINE_TYPE_OPTIONS"\
+                :key="opt.operator"\
+                class="edge-toolbar__type-option edge-toolbar__btn--line-opt"\
+                :class="{ \'edge-toolbar__type-option--selected\': getSequenceMessageLineType() === opt.operator }"\
+                @click="sequenceToolbarSelectLineType(opt.operator)"\
+              >{{ opt.label }}</button>\
+            </div>\
+          </div>\
+          <button class="edge-toolbar__btn edge-toolbar__btn--danger" @click="sequenceToolbarDelete">Delete</button>\
         </div>\
       </div>\
       <div v-else class="preview-area__empty">\

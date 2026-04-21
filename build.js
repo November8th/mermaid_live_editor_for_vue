@@ -16,6 +16,7 @@ const coreFiles = [
   'src/utils/SequenceMessageCodec.js',
   'src/utils/IdAllocator.js',
   'src/utils/ModelDiagnostics.js',
+  'src/utils/ParserHighlight.js',
   'src/sequence-parser.js',
   'src/sequence-generator.js',
   'src/utils/FlowEdgeCodec.js',

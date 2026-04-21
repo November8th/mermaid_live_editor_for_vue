@@ -329,10 +329,55 @@ mermaid-toolbar {
   overflow: hidden;
 }
 
-.code-editor__textarea {
+.code-editor__stack {
+  position: relative;
+  display: flex;
+  flex-direction: column;
   flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.code-editor__highlight-layer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.code-editor__highlight-content {
+  position: absolute;
+  top: 0;
+  left: 0;
+  min-width: 100%;
+  margin: 0;
+  padding: 16px 20px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.75;
+  letter-spacing: 0.2px;
+  white-space: pre;
+  color: transparent;
+}
+
+.code-editor__highlight-line {
+  display: block;
+  min-height: 1.75em;
+  border-radius: 4px;
+}
+
+.code-editor__highlight-line--active {
+  background: linear-gradient(180deg, rgba(250, 204, 21, 0.28), rgba(250, 204, 21, 0.18));
+  box-shadow: inset 0 0 0 1px rgba(217, 119, 6, 0.16);
+}
+
+.code-editor__textarea {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  min-height: 0;
   width: 100%;
-  background: var(--bg-editor);
+  background: transparent;
   color: var(--text-primary);
   border: none;
   outline: none;
@@ -348,7 +393,7 @@ mermaid-toolbar {
 }
 
 .code-editor__textarea:focus {
-  background: var(--bg-editor-focus);
+  background: transparent;
 }
 
 .code-editor__textarea::placeholder {

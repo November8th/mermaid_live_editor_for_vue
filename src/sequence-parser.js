@@ -7,6 +7,51 @@
   'use strict';
 
   var MESSAGE_RE = SequenceMessageCodec.MESSAGE_RE;
+  var BLOCK_OPEN_RE = /^(loop|alt|opt|par)(?:\s+(.+))?$/i;
+  var RAW_BLOCK_OPEN_RE = /^(rect|critical|break|box)\b(?:\s+(.+))?$/i;
+
+  function pushBlock(model, kind, recognized) {
+    model._blockStack.push({
+      kind: String(kind || '').toLowerCase(),
+      recognized: recognized !== false
+    });
+  }
+
+  function popBlock(model) {
+    return model._blockStack.length ? model._blockStack.pop() : null;
+  }
+
+  function getBlockTop(model) {
+    return model._blockStack.length ? model._blockStack[model._blockStack.length - 1] : null;
+  }
+
+  function countSourceOccurrence(model, line) {
+    return ParserHighlight.nextOccurrence(model._sourceTextCounts, line);
+  }
+
+  function pushRawStatement(model, line, blockRole, lineNumber, sourceInfo) {
+    var rawText = sourceInfo ? sourceInfo.text : String(line || '').trim();
+    var occurrence = sourceInfo ? sourceInfo.occurrence : 1;
+    model.statements.push({
+      type: 'raw',
+      raw: line,
+      blockRole: blockRole || '',
+      lineNumber: lineNumber || null,
+      rawText: rawText,
+      occurrence: occurrence
+    });
+    model._diagnostics.rawStatementCount++;
+    if (lineNumber && !model._diagnostics.rawLineMap[lineNumber]) {
+    model._diagnostics.rawLineMap[lineNumber] = true;
+      model._diagnostics.rawLineNumbers.push(lineNumber);
+    }
+    model._diagnostics.rawTargets.push({
+      lineNumber: lineNumber || null,
+      text: rawText,
+      occurrence: occurrence,
+      blockRole: blockRole || ''
+    });
+  }
 
   function ensureParticipant(model, id, label) {
     if (!id || model._participantMap[id]) return;
@@ -65,9 +110,10 @@
     return true;
   }
 
-  function parseControlLine(line, model) {
-    var match = line.match(/^(loop|alt|else|opt|par|and)(?:\s+(.+))?$/i);
+  function parseControlLine(line, model, lineNumber, sourceInfo) {
+    var match = line.match(BLOCK_OPEN_RE);
     if (match) {
+      pushBlock(model, match[1], true);
       model.statements.push({
         type: match[1].toLowerCase(),
         text: (match[2] || '').trim()
@@ -75,8 +121,41 @@
       return true;
     }
 
+    match = line.match(/^(else|and)(?:\s+(.+))?$/i);
+    if (match) {
+      var branchType = match[1].toLowerCase();
+      var top = getBlockTop(model);
+      var expected = branchType === 'else' ? 'alt' : 'par';
+      if (top && top.recognized && top.kind === expected) {
+        model.statements.push({
+          type: branchType,
+          text: (match[2] || '').trim()
+        });
+      } else {
+        pushRawStatement(model, line, '', lineNumber, sourceInfo);
+      }
+      return true;
+    }
+
+    match = line.match(RAW_BLOCK_OPEN_RE);
+    if (match) {
+      pushBlock(model, match[1], false);
+      pushRawStatement(model, line, 'open', lineNumber, sourceInfo);
+      return true;
+    }
+
     if (/^end$/i.test(line)) {
-      model.statements.push({ type: 'end' });
+      var ended = popBlock(model);
+      if (!ended) {
+        pushRawStatement(model, line, 'close', lineNumber, sourceInfo);
+        model._diagnostics.orphanEndCount++;
+        return true;
+      }
+      if (ended.recognized) {
+        model.statements.push({ type: 'end' });
+      } else {
+        pushRawStatement(model, line, 'close', lineNumber, sourceInfo);
+      }
       return true;
     }
 
@@ -91,8 +170,16 @@
         participants: [],
         messages: [],
         statements: [],
-        nodes: [],
-        edges: []
+        diagnostics: {
+          rawStatementCount: 0,
+          orphanEndCount: 0,
+          unmatchedBlockCount: 0,
+          rawLineNumbers: [],
+          rawTargets: []
+        },
+      nodes: [],
+      edges: [],
+      _sourceTextCounts: {}
       };
     }
 
@@ -103,9 +190,26 @@
       participants: [],
       messages: [],
       statements: [],
+      diagnostics: {
+        rawStatementCount: 0,
+        orphanEndCount: 0,
+        unmatchedBlockCount: 0,
+        rawLineNumbers: [],
+        rawTargets: []
+      },
       nodes: [],
       edges: [],
-      _participantMap: {}
+      _participantMap: {},
+      _blockStack: [],
+      _sourceTextCounts: {},
+      _diagnostics: {
+        rawStatementCount: 0,
+        orphanEndCount: 0,
+        unmatchedBlockCount: 0,
+        rawLineNumbers: [],
+        rawLineMap: {},
+        rawTargets: []
+      }
     };
     var started = false;
 
@@ -120,14 +224,27 @@
         continue;
       }
 
+      var sourceInfo = countSourceOccurrence(model, line);
       if (line === 'autonumber') { model.autonumber = true; continue; }
       if (parseParticipantLine(line, model)) continue;
       if (parseMessageLine(line, model)) continue;
       if (parseActivationLine(line, model)) continue;
-      if (parseControlLine(line, model)) continue;
+      if (parseControlLine(line, model, i + 1, sourceInfo)) continue;
+      pushRawStatement(model, line, '', i + 1, sourceInfo);
     }
 
+    model._diagnostics.unmatchedBlockCount = model._blockStack.length;
+    model.diagnostics = {
+      rawStatementCount: model._diagnostics.rawStatementCount,
+      orphanEndCount: model._diagnostics.orphanEndCount,
+      unmatchedBlockCount: model._diagnostics.unmatchedBlockCount,
+      rawLineNumbers: model._diagnostics.rawLineNumbers.slice(),
+      rawTargets: model._diagnostics.rawTargets.slice()
+    };
     delete model._participantMap;
+    delete model._blockStack;
+    delete model._sourceTextCounts;
+    delete model._diagnostics;
     return model;
   }
 
