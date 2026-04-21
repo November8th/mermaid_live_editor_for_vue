@@ -1,6 +1,8 @@
 (function (global) {
   'use strict';
 
+  var HANDLE_OFFSET_Y = 8;
+
   var SequenceMessageDragHandler = {
     _overlay: null,
     _dragLine: null,
@@ -107,7 +109,7 @@
 
     _addHandle: function (svgEl, participant, slot, participantMap, ctx) {
       var x = participant.cx;
-      var y = slot.y;
+      var y = slot.y + HANDLE_OFFSET_Y;
       var self = this;
 
       var hit = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
