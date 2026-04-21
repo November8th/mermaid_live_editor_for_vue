@@ -19,6 +19,7 @@
       SequenceMessageDragHandler.attach(svgEl, participantMap, insertSlots, ctx);
       SequenceSvgHandler._attachParticipants(participantTargets, svgEl, ctx);
       SequenceSvgHandler._attachMessages(messages, svgEl, ctx);
+      SequenceSvgHandler._attachNotes(svgEl, model, ctx);
     },
 
     _attachParticipants: function (participantTargets, svgEl, ctx) {
@@ -226,6 +227,55 @@
         }
       });
       ctx.focusSequenceMessageInput();
+    },
+
+    _attachNotes: function (svgEl, model, ctx) {
+      var noteRects = Array.prototype.slice.call(svgEl.querySelectorAll('rect.note'));
+      var noteStatements = [];
+      var statements = (model && model.statements) || [];
+      for (var i = 0; i < statements.length; i++) {
+        if (statements[i] && statements[i].type === 'note') {
+          noteStatements.push({ statementIndex: i, statement: statements[i] });
+        }
+      }
+
+      var seenGroups = [], noteGroups = [];
+      for (var r = 0; r < noteRects.length; r++) {
+        var g = noteRects[r].parentNode;
+        if (g && seenGroups.indexOf(g) === -1) { seenGroups.push(g); noteGroups.push(g); }
+      }
+
+      for (var j = 0; j < Math.min(noteGroups.length, noteStatements.length); j++) {
+        (function (noteGroup, noteInfo) {
+          noteGroup.style.cursor = 'pointer';
+          noteGroup.style.pointerEvents = 'all';
+          noteGroup.addEventListener('click', function (e) {
+            e.stopPropagation();
+            e.preventDefault();
+            ctx.setState({
+              selectedSequenceNoteStatementIndex: noteInfo.statementIndex,
+              selectedSequenceParticipantId: null,
+              selectedSequenceMessageIndex: null,
+              selectedSequenceMessageIndices: [],
+              selectedSequenceBlockId: null,
+              sequenceToolbar: {
+                type: 'note',
+                noteStatementIndex: noteInfo.statementIndex,
+                text: noteInfo.statement.text || '',
+                x: e.clientX,
+                y: e.clientY
+              }
+            });
+          });
+          noteGroup.addEventListener('dblclick', function (e) {
+            e.stopPropagation();
+            e.preventDefault();
+            if (ctx.openSequenceNoteEdit) {
+              ctx.openSequenceNoteEdit(noteInfo.statementIndex, noteInfo.statement.text || '', e.clientX, e.clientY);
+            }
+          });
+        })(noteGroups[j], noteStatements[j]);
+      }
     },
 
     // solid(단일 dash) ↔ dotted(이중 dash) 토글

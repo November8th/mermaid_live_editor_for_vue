@@ -204,7 +204,9 @@
         if (this.isFlowchart || !data || data.statementIndex === null || data.statementIndex === undefined) return;
         this._snapshot();
         this._updateSequenceModel({
-          statements: SequenceStatementUtils.updateBranchText(this.model, data.statementIndex, data.text || '')
+          statements: String(data.text || '').trim()
+            ? SequenceStatementUtils.updateBranchText(this.model, data.statementIndex, data.text || '')
+            : SequenceStatementUtils.deleteBranchStatement(this.model, data.statementIndex)
         });
       },
 
@@ -213,6 +215,27 @@
         this._snapshot();
         this._updateSequenceModel({
           statements: SequenceStatementUtils.changeBlockKind(this.model, data.blockId, data.kind)
+        });
+      },
+
+      addSequenceNote: function (data) {
+        if (this.isFlowchart || !data || !data.participantId) return;
+        this._snapshot();
+        this._updateSequenceModel({
+          statements: SequenceStatementUtils.addNoteStatement(
+            this.model,
+            data.participantId,
+            data.insertIndex !== undefined ? data.insertIndex : null,
+            'Note'
+          )
+        });
+      },
+
+      updateSequenceNoteText: function (data) {
+        if (this.isFlowchart || !data || data.statementIndex === null || data.statementIndex === undefined) return;
+        this._snapshot();
+        this._updateSequenceModel({
+          statements: SequenceStatementUtils.updateNoteText(this.model, data.statementIndex, data.text || '')
         });
       },
 
@@ -239,6 +262,12 @@
         if (data.sequenceBlockId) {
           this._updateSequenceModel({
             statements: SequenceStatementUtils.deleteBlock(this.model, data.sequenceBlockId)
+          });
+          return true;
+        }
+        if (data.sequenceNoteStatementIndex !== null && data.sequenceNoteStatementIndex !== undefined) {
+          this._updateSequenceModel({
+            statements: SequenceStatementUtils.deleteNoteStatement(this.model, data.sequenceNoteStatementIndex)
           });
           return true;
         }

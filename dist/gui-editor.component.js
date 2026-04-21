@@ -1,6 +1,6 @@
 /**
  * gui-editor.component.js
- * Built: 2026-04-21T05:19:08.482Z
+ * Built: 2026-04-21T06:15:38.385Z
  *
  * Concatenation of gui-editor source files (no minification).
  * Requires global Vue 2 and Mermaid loaded separately.
@@ -352,6 +352,42 @@
     return statements;
   }
 
+  function deleteBranchStatement(model, statementIndex) {
+    var statements = cloneStatements(model);
+    if (statementIndex < 0 || statementIndex >= statements.length) return statements;
+    if (statements[statementIndex].type !== 'else' && statements[statementIndex].type !== 'and') return statements;
+    statements.splice(statementIndex, 1);
+    return statements;
+  }
+
+  function addNoteStatement(model, participantId, insertAtMessageIndex, text) {
+    var statements = cloneStatements(model);
+    var note = { type: 'note', participants: [participantId], text: text || 'Note' };
+    var statementIndex = (insertAtMessageIndex !== null && insertAtMessageIndex !== undefined)
+      ? messageIndexToStatementIndex(statements, insertAtMessageIndex)
+      : -1;
+    if (statementIndex === -1) {
+      statements.push(note);
+    } else {
+      statements.splice(statementIndex, 0, note);
+    }
+    return statements;
+  }
+
+  function updateNoteText(model, statementIndex, text) {
+    var statements = cloneStatements(model);
+    if (statementIndex < 0 || statementIndex >= statements.length) return statements;
+    statements[statementIndex] = Object.assign({}, statements[statementIndex], { text: text || '' });
+    return statements;
+  }
+
+  function deleteNoteStatement(model, statementIndex) {
+    var statements = cloneStatements(model);
+    if (statementIndex < 0 || statementIndex >= statements.length) return statements;
+    statements.splice(statementIndex, 1);
+    return statements;
+  }
+
   global.SequenceStatementUtils = {
     cloneStatements: cloneStatements,
     listBlocks: listBlocks,
@@ -362,8 +398,12 @@
     insertBranchStatement: insertBranchStatement,
     updateBlockText: updateBlockText,
     updateBranchText: updateBranchText,
+    deleteBranchStatement: deleteBranchStatement,
     deleteBlock: deleteBlock,
-    changeBlockKind: changeBlockKind
+    changeBlockKind: changeBlockKind,
+    addNoteStatement: addNoteStatement,
+    updateNoteText: updateNoteText,
+    deleteNoteStatement: deleteNoteStatement
   };
 
 })(typeof window !== 'undefined' ? window : this);
@@ -621,6 +661,7 @@
   var MESSAGE_RE = SequenceMessageCodec.MESSAGE_RE;
   var BLOCK_OPEN_RE = /^(loop|alt|opt|par)(?:\s+(.+))?$/i;
   var RAW_BLOCK_OPEN_RE = /^(rect|critical|break|box)\b(?:\s+(.+))?$/i;
+  var NOTE_OVER_RE = /^note\s+over\s+([A-Za-z0-9_\u3131-\uD79D]+(?:\s*,\s*[A-Za-z0-9_\u3131-\uD79D]+)*)(?:\s*:\s*(.*))?$/i;
 
   function pushBlock(model, kind, recognized) {
     model._blockStack.push({
@@ -708,6 +749,18 @@
       type: 'message',
       message: Object.assign({}, message)
     });
+    return true;
+  }
+
+  function parseNoteLine(line, model) {
+    var match = line.match(NOTE_OVER_RE);
+    if (!match) return false;
+    var participants = match[1].split(',').map(function (p) { return p.trim(); }).filter(Boolean);
+    var text = (match[2] || '').trim();
+    for (var i = 0; i < participants.length; i++) {
+      ensureParticipant(model, participants[i], participants[i]);
+    }
+    model.statements.push({ type: 'note', participants: participants, text: text });
     return true;
   }
 
@@ -843,6 +896,7 @@
       if (parseParticipantLine(line, model)) continue;
       if (parseMessageLine(line, model)) continue;
       if (parseActivationLine(line, model)) continue;
+      if (parseNoteLine(line, model)) continue;
       if (parseControlLine(line, model, i + 1, sourceInfo)) continue;
       pushRawStatement(model, line, '', i + 1, sourceInfo);
     }
@@ -914,6 +968,11 @@
 
     if (/^(loop|alt|else|opt|par|and)$/.test(statement.type)) {
       return renderIndented(level || 0, statement.type + (statement.text ? ' ' + statement.text : ''));
+    }
+
+    if (statement.type === 'note') {
+      var parts = (statement.participants || []).join(', ');
+      return renderIndented(level || 0, 'note over ' + parts + (statement.text ? ': ' + statement.text : ''));
     }
 
     if (statement.type === 'raw') {
@@ -2366,6 +2425,22 @@
         };
         vm.$nextTick(function () {
           var el = vm.$refs.sequenceBlockInput;
+          if (el) { el.focus(); el.select(); }
+        });
+      },
+      openSequenceNoteEdit: function (statementIndex, text, clientX, clientY) {
+        vm.sequenceToolbar = null;
+        vm.editingSequenceNoteStatementIndex = statementIndex;
+        vm.editingSequenceNoteText = text || '';
+        vm.sequenceNoteEditStyle = {
+          position: 'fixed',
+          left: Math.max(12, clientX - 140) + 'px',
+          top: Math.max(12, clientY - 22) + 'px',
+          zIndex: 1000,
+          width: '280px'
+        };
+        vm.$nextTick(function () {
+          var el = vm.$refs.sequenceNoteInput;
           if (el) { el.focus(); el.select(); }
         });
       },
@@ -3934,7 +4009,48 @@
       hit.addEventListener('mousedown', function (e) {
         e.preventDefault();
         e.stopPropagation();
-        self._startDrag(svgEl, participant.id, x, y, slot.insertIndex, participantMap, ctx);
+        var startX = e.clientX, startY = e.clientY;
+        var didDrag = false;
+
+        var onMove = function (me) {
+          var dx = me.clientX - startX, dy = me.clientY - startY;
+          if (!didDrag && (dx * dx + dy * dy) > 25) {
+            didDrag = true;
+            document.removeEventListener('mousemove', onMove);
+            document.removeEventListener('mouseup', onUp);
+            self._startDrag(svgEl, participant.id, x, y, slot.insertIndex, participantMap, ctx);
+          }
+        };
+
+        var onUp = function () {
+          document.removeEventListener('mousemove', onMove);
+          document.removeEventListener('mouseup', onUp);
+          if (!didDrag) {
+            var screen = SvgPositionTracker.svgToScreen(svgEl, x, y);
+            ctx.setState({
+              selectedSequenceParticipantId: null,
+              selectedSequenceMessageIndex: null,
+              selectedSequenceMessageIndices: [],
+              selectedSequenceBlockId: null,
+              sequenceToolbar: {
+                type: 'insert',
+                participantId: participant.id,
+                insertIndex: slot.insertIndex,
+                x: screen ? screen.x : e.clientX,
+                y: screen ? screen.y : e.clientY
+              }
+            });
+          }
+        };
+
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+      });
+
+      // mouseup 후 발생하는 click 이 document._clickCloseHandler 까지 버블링해서
+      // sequenceToolbar 를 즉시 null 로 만드는 문제를 막는다
+      hit.addEventListener('click', function (e) {
+        e.stopPropagation();
       });
 
       this._handles.push(hit, circle, plus);
@@ -4442,6 +4558,7 @@
       SequenceMessageDragHandler.attach(svgEl, participantMap, insertSlots, ctx);
       SequenceSvgHandler._attachParticipants(participantTargets, svgEl, ctx);
       SequenceSvgHandler._attachMessages(messages, svgEl, ctx);
+      SequenceSvgHandler._attachNotes(svgEl, model, ctx);
     },
 
     _attachParticipants: function (participantTargets, svgEl, ctx) {
@@ -4649,6 +4766,55 @@
         }
       });
       ctx.focusSequenceMessageInput();
+    },
+
+    _attachNotes: function (svgEl, model, ctx) {
+      var noteRects = Array.prototype.slice.call(svgEl.querySelectorAll('rect.note'));
+      var noteStatements = [];
+      var statements = (model && model.statements) || [];
+      for (var i = 0; i < statements.length; i++) {
+        if (statements[i] && statements[i].type === 'note') {
+          noteStatements.push({ statementIndex: i, statement: statements[i] });
+        }
+      }
+
+      var seenGroups = [], noteGroups = [];
+      for (var r = 0; r < noteRects.length; r++) {
+        var g = noteRects[r].parentNode;
+        if (g && seenGroups.indexOf(g) === -1) { seenGroups.push(g); noteGroups.push(g); }
+      }
+
+      for (var j = 0; j < Math.min(noteGroups.length, noteStatements.length); j++) {
+        (function (noteGroup, noteInfo) {
+          noteGroup.style.cursor = 'pointer';
+          noteGroup.style.pointerEvents = 'all';
+          noteGroup.addEventListener('click', function (e) {
+            e.stopPropagation();
+            e.preventDefault();
+            ctx.setState({
+              selectedSequenceNoteStatementIndex: noteInfo.statementIndex,
+              selectedSequenceParticipantId: null,
+              selectedSequenceMessageIndex: null,
+              selectedSequenceMessageIndices: [],
+              selectedSequenceBlockId: null,
+              sequenceToolbar: {
+                type: 'note',
+                noteStatementIndex: noteInfo.statementIndex,
+                text: noteInfo.statement.text || '',
+                x: e.clientX,
+                y: e.clientY
+              }
+            });
+          });
+          noteGroup.addEventListener('dblclick', function (e) {
+            e.stopPropagation();
+            e.preventDefault();
+            if (ctx.openSequenceNoteEdit) {
+              ctx.openSequenceNoteEdit(noteInfo.statementIndex, noteInfo.statement.text || '', e.clientX, e.clientY);
+            }
+          });
+        })(noteGroups[j], noteStatements[j]);
+      }
     },
 
     // solid(단일 dash) ↔ dotted(이중 dash) 토글
@@ -5049,7 +5215,9 @@
         if (this.isFlowchart || !data || data.statementIndex === null || data.statementIndex === undefined) return;
         this._snapshot();
         this._updateSequenceModel({
-          statements: SequenceStatementUtils.updateBranchText(this.model, data.statementIndex, data.text || '')
+          statements: String(data.text || '').trim()
+            ? SequenceStatementUtils.updateBranchText(this.model, data.statementIndex, data.text || '')
+            : SequenceStatementUtils.deleteBranchStatement(this.model, data.statementIndex)
         });
       },
 
@@ -5058,6 +5226,27 @@
         this._snapshot();
         this._updateSequenceModel({
           statements: SequenceStatementUtils.changeBlockKind(this.model, data.blockId, data.kind)
+        });
+      },
+
+      addSequenceNote: function (data) {
+        if (this.isFlowchart || !data || !data.participantId) return;
+        this._snapshot();
+        this._updateSequenceModel({
+          statements: SequenceStatementUtils.addNoteStatement(
+            this.model,
+            data.participantId,
+            data.insertIndex !== undefined ? data.insertIndex : null,
+            'Note'
+          )
+        });
+      },
+
+      updateSequenceNoteText: function (data) {
+        if (this.isFlowchart || !data || data.statementIndex === null || data.statementIndex === undefined) return;
+        this._snapshot();
+        this._updateSequenceModel({
+          statements: SequenceStatementUtils.updateNoteText(this.model, data.statementIndex, data.text || '')
         });
       },
 
@@ -5084,6 +5273,12 @@
         if (data.sequenceBlockId) {
           this._updateSequenceModel({
             statements: SequenceStatementUtils.deleteBlock(this.model, data.sequenceBlockId)
+          });
+          return true;
+        }
+        if (data.sequenceNoteStatementIndex !== null && data.sequenceNoteStatementIndex !== undefined) {
+          this._updateSequenceModel({
+            statements: SequenceStatementUtils.deleteNoteStatement(this.model, data.sequenceNoteStatementIndex)
           });
           return true;
         }
@@ -5630,6 +5825,7 @@ Vue.component('mermaid-preview', {
       selectedSequenceMessageIndex: null,
       selectedSequenceMessageIndices: [],
       selectedSequenceBlockId: null,
+      selectedSequenceNoteStatementIndex: null,
 
       // 노드 인라인 편집
       editingNodeId:  null,
@@ -5654,6 +5850,9 @@ Vue.component('mermaid-preview', {
       editingSequenceBranchStatementIndex: null,
       editingSequenceBlockText: '',
       sequenceBlockEditStyle: {},
+      editingSequenceNoteStatementIndex: null,
+      editingSequenceNoteText: '',
+      sequenceNoteEditStyle: {},
 
       // 컨텍스트 UI 상태
       contextMenu:  null,   // { nodeId, x, y }
@@ -5751,7 +5950,8 @@ Vue.component('mermaid-preview', {
       if (e.key === 'Delete' || e.key === 'Backspace') {
         if (self.editingNodeId !== null || self.editingEdgeIndex !== null ||
             self.editingSequenceParticipantId !== null || self.editingSequenceMessageIndex !== null ||
-            self.editingSequenceBlockId !== null || self.editingSequenceBranchStatementIndex !== null) return;
+            self.editingSequenceBlockId !== null || self.editingSequenceBranchStatementIndex !== null ||
+            self.editingSequenceNoteStatementIndex !== null) return;
         if (self.selectedNodeId || self.selectedEdgeIndex !== null) {
           self.$emit('delete-selected', {
             nodeId:    self.selectedNodeId,
@@ -5769,6 +5969,9 @@ Vue.component('mermaid-preview', {
           self.selectedSequenceMessageIndex = null;
           self.selectedSequenceMessageIndices = [];
           self.selectedSequenceBlockId = null;
+        } else if (self.selectedSequenceNoteStatementIndex !== null) {
+          self.$emit('delete-selected', { sequenceNoteStatementIndex: self.selectedSequenceNoteStatementIndex });
+          self.selectedSequenceNoteStatementIndex = null;
         }
       }
 
@@ -5778,6 +5981,8 @@ Vue.component('mermaid-preview', {
         self.cancelSequenceParticipantEdit();
         self.cancelSequenceMessageEdit();
         self.cancelSequenceBlockEdit();
+        self.cancelSequenceNoteEdit();
+        self.selectedSequenceNoteStatementIndex = null;
         self.selectedNodeId    = null;
         self.selectedEdgeIndex = null;
         self.selectedSequenceParticipantId = null;
@@ -5844,6 +6049,7 @@ Vue.component('mermaid-preview', {
       if (this.editingSequenceParticipantId) this.confirmSequenceParticipantEdit();
       if (this.editingSequenceMessageIndex !== null) this.confirmSequenceMessageEdit();
       if (this.editingSequenceBlockId !== null || this.editingSequenceBranchStatementIndex !== null) this.confirmSequenceBlockEdit();
+      if (this.editingSequenceNoteStatementIndex !== null) this.confirmSequenceNoteEdit();
     },
 
     // 공통 렌더 유틸
@@ -6391,6 +6597,27 @@ Vue.component('mermaid-preview', {
       if (e.key === 'Escape') { this.cancelSequenceBlockEdit(); }
     },
 
+    confirmSequenceNoteEdit: function () {
+      if (this.editingSequenceNoteStatementIndex !== null) {
+        this.$emit('update-sequence-note-text', {
+          statementIndex: this.editingSequenceNoteStatementIndex,
+          text: this.editingSequenceNoteText.trim()
+        });
+      }
+      this.editingSequenceNoteStatementIndex = null;
+      this.editingSequenceNoteText = '';
+    },
+
+    cancelSequenceNoteEdit: function () {
+      this.editingSequenceNoteStatementIndex = null;
+      this.editingSequenceNoteText = '';
+    },
+
+    onSequenceNoteEditKeyDown: function (e) {
+      if (e.key === 'Enter')  { e.preventDefault(); this.confirmSequenceNoteEdit(); }
+      if (e.key === 'Escape') { this.cancelSequenceNoteEdit(); }
+    },
+
     // 공통 노드 컨텍스트 메뉴 액션 유틸
 
     contextEditNode: function () {
@@ -6649,6 +6876,8 @@ Vue.component('mermaid-preview', {
         SequenceSvgHandler.startMessageEdit(toolbar.index, toolbar.x, toolbar.y, svgEl, this._buildCtxLite());
       } else if (toolbar.type === 'block') {
         this._buildCtxLite().openSequenceBlockEdit(toolbar.blockId, toolbar.text || '', toolbar.x, toolbar.y);
+      } else if (toolbar.type === 'note') {
+        this._buildCtxLite().openSequenceNoteEdit(toolbar.noteStatementIndex, toolbar.text || '', toolbar.x, toolbar.y);
       }
     },
 
@@ -6673,6 +6902,9 @@ Vue.component('mermaid-preview', {
           sequenceBlockId: this.sequenceToolbar.blockId
         });
         this.selectedSequenceBlockId = null;
+      } else if (this.sequenceToolbar.type === 'note') {
+        this.$emit('delete-selected', { sequenceNoteStatementIndex: this.sequenceToolbar.noteStatementIndex });
+        this.selectedSequenceNoteStatementIndex = null;
       }
       this.sequenceToolbar = null;
     },
@@ -6709,6 +6941,27 @@ Vue.component('mermaid-preview', {
       this.$emit('change-sequence-block-type', {
         blockId: this.sequenceToolbar.blockId,
         kind: kind
+      });
+      this.sequenceToolbar = null;
+    },
+
+    sequenceToolbarInsertSelfLoop: function () {
+      if (!this.sequenceToolbar || this.sequenceToolbar.type !== 'insert') return;
+      var tb = this.sequenceToolbar;
+      this.$emit('add-sequence-message', {
+        fromId: tb.participantId,
+        toId: tb.participantId,
+        insertIndex: tb.insertIndex
+      });
+      this.sequenceToolbar = null;
+    },
+
+    sequenceToolbarInsertMemo: function () {
+      if (!this.sequenceToolbar || this.sequenceToolbar.type !== 'insert') return;
+      var tb = this.sequenceToolbar;
+      this.$emit('create-sequence-note', {
+        participantId: tb.participantId,
+        insertIndex: tb.insertIndex
       });
       this.sequenceToolbar = null;
     },
@@ -6823,6 +7076,9 @@ Vue.component('mermaid-preview', {
         <div v-if="editingSequenceBlockId !== null || editingSequenceBranchStatementIndex !== null" class="node-edit-overlay" :style="sequenceBlockEditStyle">\
           <input ref="sequenceBlockInput" class="node-edit-input" v-model="editingSequenceBlockText" placeholder="Block text" @keydown="onSequenceBlockEditKeyDown" @blur="confirmSequenceBlockEdit" />\
         </div>\
+        <div v-if="editingSequenceNoteStatementIndex !== null" class="node-edit-overlay" :style="sequenceNoteEditStyle">\
+          <input ref="sequenceNoteInput" class="node-edit-input" v-model="editingSequenceNoteText" placeholder="Note text" @keydown="onSequenceNoteEditKeyDown" @blur="confirmSequenceNoteEdit" />\
+        </div>\
         <div v-if="contextMenu" class="context-menu" :style="{ left: contextMenu.x + &quot;px&quot;, top: contextMenu.y + &quot;px&quot; }" @click.stop>\
           <div class="context-menu__section-title">Change Shape</div>\
           <div class="context-menu__shapes-grid">\
@@ -6890,6 +7146,8 @@ Vue.component('mermaid-preview', {
           <button class="edge-toolbar__btn edge-toolbar__btn--danger" @click="edgeToolbarDelete" title="Delete edge">Delete</button>\
         </div>\
         <div v-if="sequenceToolbar" class="sequence-toolbar" :style="{ left: sequenceToolbar.x + &quot;px&quot;, top: sequenceToolbar.y + &quot;px&quot; }" @click.stop>\
+          <button v-if="sequenceToolbar.type === &quot;insert&quot;" class="edge-toolbar__btn" @click="sequenceToolbarInsertSelfLoop">↩ Self Loop</button>\
+          <button v-if="sequenceToolbar.type === &quot;insert&quot;" class="edge-toolbar__btn" @click="sequenceToolbarInsertMemo">≡ Memo</button>\
           <button v-if="sequenceToolbar.type === &quot;selection&quot; &amp;&amp; sequenceToolbar.parentKind === &quot;alt&quot;" class="edge-toolbar__btn edge-toolbar__btn--branch" @click="sequenceToolbarAddBranch(&quot;else&quot;)">+ else</button>\
           <button v-if="sequenceToolbar.type === &quot;selection&quot; &amp;&amp; sequenceToolbar.parentKind === &quot;par&quot;" class="edge-toolbar__btn edge-toolbar__btn--branch" @click="sequenceToolbarAddBranch(&quot;and&quot;)">+ and</button>\
           <button v-if="sequenceToolbar.type === &quot;selection&quot;" class="edge-toolbar__btn" @click="sequenceToolbarWrapBlock(&quot;loop&quot;)">Loop ↻</button>\
@@ -6900,7 +7158,7 @@ Vue.component('mermaid-preview', {
           <button v-if="sequenceToolbar.type === &quot;block&quot;" class="edge-toolbar__btn" :class="{ \'edge-toolbar__btn--active\': sequenceToolbar.kind === &quot;opt&quot; }" @click="sequenceToolbarChangeBlockType(&quot;opt&quot;)">Opt ?</button>\
           <button v-if="sequenceToolbar.type === &quot;block&quot;" class="edge-toolbar__btn" :class="{ \'edge-toolbar__btn--active\': sequenceToolbar.kind === &quot;alt&quot; }" @click="sequenceToolbarChangeBlockType(&quot;alt&quot;)">Alt ⎇</button>\
           <button v-if="sequenceToolbar.type === &quot;block&quot;" class="edge-toolbar__btn" :class="{ \'edge-toolbar__btn--active\': sequenceToolbar.kind === &quot;par&quot; }" @click="sequenceToolbarChangeBlockType(&quot;par&quot;)">Par∥</button>\
-          <button v-if="sequenceToolbar.type !== &quot;block&quot; &amp;&amp; sequenceToolbar.type !== &quot;selection&quot;" class="edge-toolbar__btn" @click="sequenceToolbarEdit">Label ✎</button>\
+          <button v-if="sequenceToolbar.type !== &quot;block&quot; &amp;&amp; sequenceToolbar.type !== &quot;selection&quot; &amp;&amp; sequenceToolbar.type !== &quot;insert&quot;" class="edge-toolbar__btn" @click="sequenceToolbarEdit">Text ✎</button>\
           <button v-if="sequenceToolbar.type === &quot;participant&quot;" class="edge-toolbar__btn" @click="sequenceToolbarMoveLeft" title="Move left">◀</button>\
           <button v-if="sequenceToolbar.type === &quot;participant&quot;" class="edge-toolbar__btn" @click="sequenceToolbarMoveRight" title="Move right">▶</button>\
           <button v-if="sequenceToolbar.type === &quot;participant&quot;" class="edge-toolbar__btn" @click="sequenceToolbarToggleKind">{{ sequenceToolbar.kind === &quot;actor&quot; ? &quot;→ Participant&quot; : &quot;→ Shape&quot; }}</button>\
@@ -6920,7 +7178,7 @@ Vue.component('mermaid-preview', {
               >{{ opt.label }}</button>\
             </div>\
           </div>\
-          <button v-if="sequenceToolbar.type !== &quot;selection&quot;" class="edge-toolbar__btn edge-toolbar__btn--danger" @click="sequenceToolbarDelete">Delete</button>\
+          <button v-if="sequenceToolbar.type !== &quot;selection&quot; &amp;&amp; sequenceToolbar.type !== &quot;insert&quot;" class="edge-toolbar__btn edge-toolbar__btn--danger" @click="sequenceToolbarDelete">Delete</button>\
         </div>\
       </div>\
       <div v-else class="preview-area__empty">\
@@ -7150,6 +7408,8 @@ Vue.component('mermaid-full-editor', {
           @update-sequence-block-text="updateSequenceBlockText"\
           @update-sequence-branch-text="updateSequenceBranchText"\
           @change-sequence-block-type="changeSequenceBlockType"\
+          @create-sequence-note="addSequenceNote"\
+          @update-sequence-note-text="updateSequenceNoteText"\
           @toggle-participant-kind="toggleParticipantKind"\
           @move-sequence-participant="moveSequenceParticipant"\
           @node-selected="onNodeSelected"\

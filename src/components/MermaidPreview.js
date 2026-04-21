@@ -46,6 +46,7 @@ Vue.component('mermaid-preview', {
       selectedSequenceMessageIndex: null,
       selectedSequenceMessageIndices: [],
       selectedSequenceBlockId: null,
+      selectedSequenceNoteStatementIndex: null,
 
       // 노드 인라인 편집
       editingNodeId:  null,
@@ -70,6 +71,9 @@ Vue.component('mermaid-preview', {
       editingSequenceBranchStatementIndex: null,
       editingSequenceBlockText: '',
       sequenceBlockEditStyle: {},
+      editingSequenceNoteStatementIndex: null,
+      editingSequenceNoteText: '',
+      sequenceNoteEditStyle: {},
 
       // 컨텍스트 UI 상태
       contextMenu:  null,   // { nodeId, x, y }
@@ -167,7 +171,8 @@ Vue.component('mermaid-preview', {
       if (e.key === 'Delete' || e.key === 'Backspace') {
         if (self.editingNodeId !== null || self.editingEdgeIndex !== null ||
             self.editingSequenceParticipantId !== null || self.editingSequenceMessageIndex !== null ||
-            self.editingSequenceBlockId !== null || self.editingSequenceBranchStatementIndex !== null) return;
+            self.editingSequenceBlockId !== null || self.editingSequenceBranchStatementIndex !== null ||
+            self.editingSequenceNoteStatementIndex !== null) return;
         if (self.selectedNodeId || self.selectedEdgeIndex !== null) {
           self.$emit('delete-selected', {
             nodeId:    self.selectedNodeId,
@@ -185,6 +190,9 @@ Vue.component('mermaid-preview', {
           self.selectedSequenceMessageIndex = null;
           self.selectedSequenceMessageIndices = [];
           self.selectedSequenceBlockId = null;
+        } else if (self.selectedSequenceNoteStatementIndex !== null) {
+          self.$emit('delete-selected', { sequenceNoteStatementIndex: self.selectedSequenceNoteStatementIndex });
+          self.selectedSequenceNoteStatementIndex = null;
         }
       }
 
@@ -194,6 +202,8 @@ Vue.component('mermaid-preview', {
         self.cancelSequenceParticipantEdit();
         self.cancelSequenceMessageEdit();
         self.cancelSequenceBlockEdit();
+        self.cancelSequenceNoteEdit();
+        self.selectedSequenceNoteStatementIndex = null;
         self.selectedNodeId    = null;
         self.selectedEdgeIndex = null;
         self.selectedSequenceParticipantId = null;
@@ -260,6 +270,7 @@ Vue.component('mermaid-preview', {
       if (this.editingSequenceParticipantId) this.confirmSequenceParticipantEdit();
       if (this.editingSequenceMessageIndex !== null) this.confirmSequenceMessageEdit();
       if (this.editingSequenceBlockId !== null || this.editingSequenceBranchStatementIndex !== null) this.confirmSequenceBlockEdit();
+      if (this.editingSequenceNoteStatementIndex !== null) this.confirmSequenceNoteEdit();
     },
 
     // 공통 렌더 유틸
@@ -807,6 +818,27 @@ Vue.component('mermaid-preview', {
       if (e.key === 'Escape') { this.cancelSequenceBlockEdit(); }
     },
 
+    confirmSequenceNoteEdit: function () {
+      if (this.editingSequenceNoteStatementIndex !== null) {
+        this.$emit('update-sequence-note-text', {
+          statementIndex: this.editingSequenceNoteStatementIndex,
+          text: this.editingSequenceNoteText.trim()
+        });
+      }
+      this.editingSequenceNoteStatementIndex = null;
+      this.editingSequenceNoteText = '';
+    },
+
+    cancelSequenceNoteEdit: function () {
+      this.editingSequenceNoteStatementIndex = null;
+      this.editingSequenceNoteText = '';
+    },
+
+    onSequenceNoteEditKeyDown: function (e) {
+      if (e.key === 'Enter')  { e.preventDefault(); this.confirmSequenceNoteEdit(); }
+      if (e.key === 'Escape') { this.cancelSequenceNoteEdit(); }
+    },
+
     // 공통 노드 컨텍스트 메뉴 액션 유틸
 
     contextEditNode: function () {
@@ -1065,6 +1097,8 @@ Vue.component('mermaid-preview', {
         SequenceSvgHandler.startMessageEdit(toolbar.index, toolbar.x, toolbar.y, svgEl, this._buildCtxLite());
       } else if (toolbar.type === 'block') {
         this._buildCtxLite().openSequenceBlockEdit(toolbar.blockId, toolbar.text || '', toolbar.x, toolbar.y);
+      } else if (toolbar.type === 'note') {
+        this._buildCtxLite().openSequenceNoteEdit(toolbar.noteStatementIndex, toolbar.text || '', toolbar.x, toolbar.y);
       }
     },
 
@@ -1089,6 +1123,9 @@ Vue.component('mermaid-preview', {
           sequenceBlockId: this.sequenceToolbar.blockId
         });
         this.selectedSequenceBlockId = null;
+      } else if (this.sequenceToolbar.type === 'note') {
+        this.$emit('delete-selected', { sequenceNoteStatementIndex: this.sequenceToolbar.noteStatementIndex });
+        this.selectedSequenceNoteStatementIndex = null;
       }
       this.sequenceToolbar = null;
     },
@@ -1125,6 +1162,27 @@ Vue.component('mermaid-preview', {
       this.$emit('change-sequence-block-type', {
         blockId: this.sequenceToolbar.blockId,
         kind: kind
+      });
+      this.sequenceToolbar = null;
+    },
+
+    sequenceToolbarInsertSelfLoop: function () {
+      if (!this.sequenceToolbar || this.sequenceToolbar.type !== 'insert') return;
+      var tb = this.sequenceToolbar;
+      this.$emit('add-sequence-message', {
+        fromId: tb.participantId,
+        toId: tb.participantId,
+        insertIndex: tb.insertIndex
+      });
+      this.sequenceToolbar = null;
+    },
+
+    sequenceToolbarInsertMemo: function () {
+      if (!this.sequenceToolbar || this.sequenceToolbar.type !== 'insert') return;
+      var tb = this.sequenceToolbar;
+      this.$emit('create-sequence-note', {
+        participantId: tb.participantId,
+        insertIndex: tb.insertIndex
       });
       this.sequenceToolbar = null;
     },
@@ -1239,6 +1297,9 @@ Vue.component('mermaid-preview', {
         <div v-if="editingSequenceBlockId !== null || editingSequenceBranchStatementIndex !== null" class="node-edit-overlay" :style="sequenceBlockEditStyle">\
           <input ref="sequenceBlockInput" class="node-edit-input" v-model="editingSequenceBlockText" placeholder="Block text" @keydown="onSequenceBlockEditKeyDown" @blur="confirmSequenceBlockEdit" />\
         </div>\
+        <div v-if="editingSequenceNoteStatementIndex !== null" class="node-edit-overlay" :style="sequenceNoteEditStyle">\
+          <input ref="sequenceNoteInput" class="node-edit-input" v-model="editingSequenceNoteText" placeholder="Note text" @keydown="onSequenceNoteEditKeyDown" @blur="confirmSequenceNoteEdit" />\
+        </div>\
         <div v-if="contextMenu" class="context-menu" :style="{ left: contextMenu.x + &quot;px&quot;, top: contextMenu.y + &quot;px&quot; }" @click.stop>\
           <div class="context-menu__section-title">Change Shape</div>\
           <div class="context-menu__shapes-grid">\
@@ -1306,6 +1367,8 @@ Vue.component('mermaid-preview', {
           <button class="edge-toolbar__btn edge-toolbar__btn--danger" @click="edgeToolbarDelete" title="Delete edge">Delete</button>\
         </div>\
         <div v-if="sequenceToolbar" class="sequence-toolbar" :style="{ left: sequenceToolbar.x + &quot;px&quot;, top: sequenceToolbar.y + &quot;px&quot; }" @click.stop>\
+          <button v-if="sequenceToolbar.type === &quot;insert&quot;" class="edge-toolbar__btn" @click="sequenceToolbarInsertSelfLoop">↩ Self Loop</button>\
+          <button v-if="sequenceToolbar.type === &quot;insert&quot;" class="edge-toolbar__btn" @click="sequenceToolbarInsertMemo">≡ Memo</button>\
           <button v-if="sequenceToolbar.type === &quot;selection&quot; &amp;&amp; sequenceToolbar.parentKind === &quot;alt&quot;" class="edge-toolbar__btn edge-toolbar__btn--branch" @click="sequenceToolbarAddBranch(&quot;else&quot;)">+ else</button>\
           <button v-if="sequenceToolbar.type === &quot;selection&quot; &amp;&amp; sequenceToolbar.parentKind === &quot;par&quot;" class="edge-toolbar__btn edge-toolbar__btn--branch" @click="sequenceToolbarAddBranch(&quot;and&quot;)">+ and</button>\
           <button v-if="sequenceToolbar.type === &quot;selection&quot;" class="edge-toolbar__btn" @click="sequenceToolbarWrapBlock(&quot;loop&quot;)">Loop ↻</button>\
@@ -1316,7 +1379,7 @@ Vue.component('mermaid-preview', {
           <button v-if="sequenceToolbar.type === &quot;block&quot;" class="edge-toolbar__btn" :class="{ \'edge-toolbar__btn--active\': sequenceToolbar.kind === &quot;opt&quot; }" @click="sequenceToolbarChangeBlockType(&quot;opt&quot;)">Opt ?</button>\
           <button v-if="sequenceToolbar.type === &quot;block&quot;" class="edge-toolbar__btn" :class="{ \'edge-toolbar__btn--active\': sequenceToolbar.kind === &quot;alt&quot; }" @click="sequenceToolbarChangeBlockType(&quot;alt&quot;)">Alt ⎇</button>\
           <button v-if="sequenceToolbar.type === &quot;block&quot;" class="edge-toolbar__btn" :class="{ \'edge-toolbar__btn--active\': sequenceToolbar.kind === &quot;par&quot; }" @click="sequenceToolbarChangeBlockType(&quot;par&quot;)">Par∥</button>\
-          <button v-if="sequenceToolbar.type !== &quot;block&quot; &amp;&amp; sequenceToolbar.type !== &quot;selection&quot;" class="edge-toolbar__btn" @click="sequenceToolbarEdit">Label ✎</button>\
+          <button v-if="sequenceToolbar.type !== &quot;block&quot; &amp;&amp; sequenceToolbar.type !== &quot;selection&quot; &amp;&amp; sequenceToolbar.type !== &quot;insert&quot;" class="edge-toolbar__btn" @click="sequenceToolbarEdit">Text ✎</button>\
           <button v-if="sequenceToolbar.type === &quot;participant&quot;" class="edge-toolbar__btn" @click="sequenceToolbarMoveLeft" title="Move left">◀</button>\
           <button v-if="sequenceToolbar.type === &quot;participant&quot;" class="edge-toolbar__btn" @click="sequenceToolbarMoveRight" title="Move right">▶</button>\
           <button v-if="sequenceToolbar.type === &quot;participant&quot;" class="edge-toolbar__btn" @click="sequenceToolbarToggleKind">{{ sequenceToolbar.kind === &quot;actor&quot; ? &quot;→ Participant&quot; : &quot;→ Shape&quot; }}</button>\
@@ -1336,7 +1399,7 @@ Vue.component('mermaid-preview', {
               >{{ opt.label }}</button>\
             </div>\
           </div>\
-          <button v-if="sequenceToolbar.type !== &quot;selection&quot;" class="edge-toolbar__btn edge-toolbar__btn--danger" @click="sequenceToolbarDelete">Delete</button>\
+          <button v-if="sequenceToolbar.type !== &quot;selection&quot; &amp;&amp; sequenceToolbar.type !== &quot;insert&quot;" class="edge-toolbar__btn edge-toolbar__btn--danger" @click="sequenceToolbarDelete">Delete</button>\
         </div>\
       </div>\
       <div v-else class="preview-area__empty">\

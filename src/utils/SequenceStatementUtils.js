@@ -244,6 +244,42 @@
     return statements;
   }
 
+  function deleteBranchStatement(model, statementIndex) {
+    var statements = cloneStatements(model);
+    if (statementIndex < 0 || statementIndex >= statements.length) return statements;
+    if (statements[statementIndex].type !== 'else' && statements[statementIndex].type !== 'and') return statements;
+    statements.splice(statementIndex, 1);
+    return statements;
+  }
+
+  function addNoteStatement(model, participantId, insertAtMessageIndex, text) {
+    var statements = cloneStatements(model);
+    var note = { type: 'note', participants: [participantId], text: text || 'Note' };
+    var statementIndex = (insertAtMessageIndex !== null && insertAtMessageIndex !== undefined)
+      ? messageIndexToStatementIndex(statements, insertAtMessageIndex)
+      : -1;
+    if (statementIndex === -1) {
+      statements.push(note);
+    } else {
+      statements.splice(statementIndex, 0, note);
+    }
+    return statements;
+  }
+
+  function updateNoteText(model, statementIndex, text) {
+    var statements = cloneStatements(model);
+    if (statementIndex < 0 || statementIndex >= statements.length) return statements;
+    statements[statementIndex] = Object.assign({}, statements[statementIndex], { text: text || '' });
+    return statements;
+  }
+
+  function deleteNoteStatement(model, statementIndex) {
+    var statements = cloneStatements(model);
+    if (statementIndex < 0 || statementIndex >= statements.length) return statements;
+    statements.splice(statementIndex, 1);
+    return statements;
+  }
+
   global.SequenceStatementUtils = {
     cloneStatements: cloneStatements,
     listBlocks: listBlocks,
@@ -254,8 +290,12 @@
     insertBranchStatement: insertBranchStatement,
     updateBlockText: updateBlockText,
     updateBranchText: updateBranchText,
+    deleteBranchStatement: deleteBranchStatement,
     deleteBlock: deleteBlock,
-    changeBlockKind: changeBlockKind
+    changeBlockKind: changeBlockKind,
+    addNoteStatement: addNoteStatement,
+    updateNoteText: updateNoteText,
+    deleteNoteStatement: deleteNoteStatement
   };
 
 })(typeof window !== 'undefined' ? window : this);

@@ -83,6 +83,22 @@
           if (el) { el.focus(); el.select(); }
         });
       },
+      openSequenceNoteEdit: function (statementIndex, text, clientX, clientY) {
+        vm.sequenceToolbar = null;
+        vm.editingSequenceNoteStatementIndex = statementIndex;
+        vm.editingSequenceNoteText = text || '';
+        vm.sequenceNoteEditStyle = {
+          position: 'fixed',
+          left: Math.max(12, clientX - 140) + 'px',
+          top: Math.max(12, clientY - 22) + 'px',
+          zIndex: 1000,
+          width: '280px'
+        };
+        vm.$nextTick(function () {
+          var el = vm.$refs.sequenceNoteInput;
+          if (el) { el.focus(); el.select(); }
+        });
+      },
       openSequenceBlockEdit: function (blockId, text, clientX, clientY) {
         vm.sequenceToolbar = null;
         vm.selectedSequenceBlockId = blockId;

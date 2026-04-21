@@ -9,6 +9,7 @@
   var MESSAGE_RE = SequenceMessageCodec.MESSAGE_RE;
   var BLOCK_OPEN_RE = /^(loop|alt|opt|par)(?:\s+(.+))?$/i;
   var RAW_BLOCK_OPEN_RE = /^(rect|critical|break|box)\b(?:\s+(.+))?$/i;
+  var NOTE_OVER_RE = /^note\s+over\s+([A-Za-z0-9_\u3131-\uD79D]+(?:\s*,\s*[A-Za-z0-9_\u3131-\uD79D]+)*)(?:\s*:\s*(.*))?$/i;
 
   function pushBlock(model, kind, recognized) {
     model._blockStack.push({
@@ -96,6 +97,18 @@
       type: 'message',
       message: Object.assign({}, message)
     });
+    return true;
+  }
+
+  function parseNoteLine(line, model) {
+    var match = line.match(NOTE_OVER_RE);
+    if (!match) return false;
+    var participants = match[1].split(',').map(function (p) { return p.trim(); }).filter(Boolean);
+    var text = (match[2] || '').trim();
+    for (var i = 0; i < participants.length; i++) {
+      ensureParticipant(model, participants[i], participants[i]);
+    }
+    model.statements.push({ type: 'note', participants: participants, text: text });
     return true;
   }
 
@@ -231,6 +244,7 @@
       if (parseParticipantLine(line, model)) continue;
       if (parseMessageLine(line, model)) continue;
       if (parseActivationLine(line, model)) continue;
+      if (parseNoteLine(line, model)) continue;
       if (parseControlLine(line, model, i + 1, sourceInfo)) continue;
       pushRawStatement(model, line, '', i + 1, sourceInfo);
     }

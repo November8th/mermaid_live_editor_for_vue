@@ -44,6 +44,11 @@
       return renderIndented(level || 0, statement.type + (statement.text ? ' ' + statement.text : ''));
     }
 
+    if (statement.type === 'note') {
+      var parts = (statement.participants || []).join(', ');
+      return renderIndented(level || 0, 'note over ' + parts + (statement.text ? ': ' + statement.text : ''));
+    }
+
     if (statement.type === 'raw') {
       return renderIndented(level || 0, statement.raw || '');
     }
