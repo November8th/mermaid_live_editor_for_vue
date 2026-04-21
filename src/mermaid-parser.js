@@ -248,6 +248,24 @@
     });
   }
 
+  function pushRawStatement(model, line) {
+    model.statements.push({
+      type: 'raw',
+      raw: line
+    });
+  }
+
+  function nextEdgeRef(model, from, to) {
+    var key = from + '->' + to;
+    var occurrence = (model._edgeRefCounts[key] || 0) + 1;
+    model._edgeRefCounts[key] = occurrence;
+    return {
+      from: from,
+      to: to,
+      occurrence: occurrence
+    };
+  }
+
   function parseFlowLine(line, model) {
     line = line.trim();
     if (!line) return true;
@@ -255,10 +273,14 @@
     var remaining = line;
     var prevNodeId = null;
     var consumedAny = false;
+    var nodeIds = [];
+    var edgeRefs = [];
 
     while (remaining.length > 0) {
       remaining = remaining.trim();
-      if (!remaining) return true;
+      if (!remaining) {
+        return consumedAny ? { type: 'flow', nodeIds: nodeIds, edgeRefs: edgeRefs } : false;
+      }
 
       var node = parseNodeDef(remaining);
       if (!node) return false;
@@ -285,6 +307,7 @@
         model._nodeMap[node.id].shape = node.shape;
         consumedAny = true;
       }
+      nodeIds.push(node.id);
 
       remaining = restAfterNode;
 
@@ -295,6 +318,7 @@
           text: model._pendingEdge.label,
           type: model._pendingEdge.type
         });
+        edgeRefs.push(nextEdgeRef(model, prevNodeId, node.id));
         model._pendingEdge = null;
         consumedAny = true;
       }
@@ -308,11 +332,11 @@
       } else {
         prevNodeId = null;
         model._pendingEdge = null;
-        return !remaining;
+        return !remaining ? { type: 'flow', nodeIds: nodeIds, edgeRefs: edgeRefs } : false;
       }
     }
 
-    return consumedAny;
+    return consumedAny ? { type: 'flow', nodeIds: nodeIds, edgeRefs: edgeRefs } : false;
   }
 
   function parseMermaid(script) {
@@ -331,8 +355,10 @@
       direction: 'TD',
       nodes: [],
       edges: [],
+      statements: [],
       _nodeMap: {},
       _pendingEdge: null,
+      _edgeRefCounts: {},
       _sourceTextCounts: {},
       diagnostics: {
         rawStatementCount: 0,
@@ -352,6 +378,7 @@
       if (!line || line.indexOf('%%') === 0) continue;
       if (line.indexOf('classDef') === 0 || line.indexOf('class ') === 0) {
         pushRawTarget(model, line, i + 1, 'class', sourceInfo);
+        pushRawStatement(model, line);
         continue;
       }
 
@@ -382,11 +409,16 @@
       if (!started) continue;
       if (line.indexOf('subgraph') === 0 || line === 'end') {
         pushRawTarget(model, line, i + 1, 'subgraph', sourceInfo);
+        pushRawStatement(model, line);
         continue;
       }
 
-      if (!parseFlowLine(line, model)) {
+      var statement = parseFlowLine(line, model);
+      if (!statement) {
         pushRawTarget(model, line, i + 1, 'flow-line', sourceInfo);
+        pushRawStatement(model, line);
+      } else {
+        model.statements.push(statement);
       }
     }
 
@@ -396,6 +428,7 @@
     };
     delete model._nodeMap;
     delete model._pendingEdge;
+    delete model._edgeRefCounts;
     delete model._sourceTextCounts;
     delete model._diagnostics;
 

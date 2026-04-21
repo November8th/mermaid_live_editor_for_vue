@@ -117,6 +117,45 @@
     return '    linkStyle ' + index + ' ' + parts.join(',');
   }
 
+  function findEdgeByRef(edges, ref) {
+    if (!ref || !edges) return { edge: null, index: -1 };
+    var occurrence = 0;
+    for (var i = 0; i < edges.length; i++) {
+      var edge = edges[i];
+      if (!edge || edge.from !== ref.from || edge.to !== ref.to) continue;
+      occurrence++;
+      if (occurrence === ref.occurrence) {
+        return { edge: edge, index: i };
+      }
+    }
+    return { edge: null, index: -1 };
+  }
+
+  function buildFlowStatementLine(statement, model, usedNodes, usedEdges) {
+    if (!statement || statement.type !== 'flow') return '';
+    var nodeIds = statement.nodeIds || [];
+    var edgeRefs = statement.edgeRefs || [];
+    if (!nodeIds.length) return '';
+
+    var firstNode = findNode(model.nodes, nodeIds[0]);
+    if (!firstNode) return '';
+    var parts = [generateNode(firstNode)];
+    usedNodes[firstNode.id] = true;
+
+    for (var i = 0; i < edgeRefs.length; i++) {
+      var edgeMatch = findEdgeByRef(model.edges, edgeRefs[i]);
+      var edge = edgeMatch.edge;
+      var nextNode = findNode(model.nodes, nodeIds[i + 1]);
+      if (!edge || !nextNode) return '';
+      if (edgeMatch.index >= 0) usedEdges[edgeMatch.index] = true;
+      usedNodes[nextNode.id] = true;
+      parts.push(generateEdgeOperator(edge));
+      parts.push(generateNode(nextNode));
+    }
+
+    return parts.join(' ');
+  }
+
   function generateMermaid(model) {
     if (!model) return '';
     if (model.type === 'sequenceDiagram' && global.SequenceGenerator) {
@@ -126,6 +165,63 @@
     var lines = [];
     var direction = model.direction || 'TD';
     lines.push('flowchart ' + direction);
+
+    var statements = model.statements || [];
+    if (statements.length) {
+      var usedNodes = {};
+      var usedEdges = {};
+
+      for (var s = 0; s < statements.length; s++) {
+        var statement = statements[s];
+        var line = '';
+        if (statement.type === 'raw') {
+          line = statement.raw || '';
+        } else if (statement.type === 'flow') {
+          line = buildFlowStatementLine(statement, model, usedNodes, usedEdges);
+        }
+        if (line) lines.push('    ' + line);
+      }
+
+      if (model.nodes && model.nodes.length > 0) {
+        for (var rn = 0; rn < model.nodes.length; rn++) {
+          if (usedNodes[model.nodes[rn].id]) continue;
+          lines.push('    ' + generateNode(model.nodes[rn]));
+        }
+      }
+
+      if (model.edges && model.edges.length > 0) {
+        for (var re = 0; re < model.edges.length; re++) {
+          if (usedEdges[re]) continue;
+          var remainingEdge = FlowEdgeCodec
+            ? FlowEdgeCodec.normalizeEdgeForOutput(model.edges[re])
+            : model.edges[re];
+          lines.push('    ' + remainingEdge.from + ' ' + generateEdgeOperator(remainingEdge) + ' ' + remainingEdge.to);
+        }
+      }
+
+      if (model.nodes && model.nodes.length > 0) {
+        for (var sn = 0; sn < model.nodes.length; sn++) {
+          var styleNode = model.nodes[sn];
+          var styleFill = normalizeHex(styleNode.fill);
+          if (!styleFill) continue;
+          lines.push(
+            '    style ' + styleNode.id +
+            ' fill:' + styleFill +
+            ',stroke:' + darkenHex(styleFill, 0.22) +
+            ',color:' + contrastText(styleFill)
+          );
+        }
+      }
+
+      if (model.edges && model.edges.length > 0) {
+        for (var se = 0; se < model.edges.length; se++) {
+          var styleLine = buildLinkStyle(se, model.edges[se]);
+          if (styleLine) lines.push(styleLine);
+        }
+      }
+
+      return lines.join('\n');
+    }
 
     if (model.nodes && model.nodes.length > 0) {
       for (var i = 0; i < model.nodes.length; i++) {
