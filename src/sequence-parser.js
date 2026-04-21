@@ -40,13 +40,47 @@
     ensureParticipant(model, match[1], match[1]);
     ensureParticipant(model, match[3], match[3]);
 
-    model.messages.push({
+    var message = {
       from: match[1],
       to: match[3],
       operator: match[2],
       text: (match[4] || '').trim()
+    };
+    model.messages.push(message);
+    model.statements.push({
+      type: 'message',
+      message: Object.assign({}, message)
     });
     return true;
+  }
+
+  function parseActivationLine(line, model) {
+    var match = line.match(/^(activate|deactivate)\s+([A-Za-z0-9_\u3131-\uD79D]+)$/i);
+    if (!match) return false;
+    ensureParticipant(model, match[2], match[2]);
+    model.statements.push({
+      type: match[1].toLowerCase(),
+      participant: match[2]
+    });
+    return true;
+  }
+
+  function parseControlLine(line, model) {
+    var match = line.match(/^(loop|alt|else|opt|par|and)(?:\s+(.+))?$/i);
+    if (match) {
+      model.statements.push({
+        type: match[1].toLowerCase(),
+        text: (match[2] || '').trim()
+      });
+      return true;
+    }
+
+    if (/^end$/i.test(line)) {
+      model.statements.push({ type: 'end' });
+      return true;
+    }
+
+    return false;
   }
 
   function parseSequence(script) {
@@ -56,6 +90,7 @@
         explicitParticipants: false,
         participants: [],
         messages: [],
+        statements: [],
         nodes: [],
         edges: []
       };
@@ -67,6 +102,7 @@
       explicitParticipants: false,
       participants: [],
       messages: [],
+      statements: [],
       nodes: [],
       edges: [],
       _participantMap: {}
@@ -87,6 +123,8 @@
       if (line === 'autonumber') { model.autonumber = true; continue; }
       if (parseParticipantLine(line, model)) continue;
       if (parseMessageLine(line, model)) continue;
+      if (parseActivationLine(line, model)) continue;
+      if (parseControlLine(line, model)) continue;
     }
 
     delete model._participantMap;

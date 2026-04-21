@@ -6,6 +6,47 @@
 (function (global) {
   'use strict';
 
+  function renderIndented(level, text) {
+    var indent = '    ';
+    for (var i = 0; i < level; i++) indent += '    ';
+    return indent + text;
+  }
+
+  function renderMessage(message, level) {
+    if (!message || !message.from || !message.to) return '';
+    return renderIndented(
+      level || 0,
+      message.from +
+      (message.operator || SequenceMessageCodec.DEFAULT_OPERATOR) +
+      message.to +
+      ': ' +
+      (message.text || '')
+    );
+  }
+
+  function renderStatement(statement, message, level) {
+    if (!statement) return '';
+
+    if (statement.type === 'message') {
+      return renderMessage(message || statement.message, level);
+    }
+
+    if (statement.type === 'activate' || statement.type === 'deactivate') {
+      if (!statement.participant) return '';
+      return renderIndented(level || 0, statement.type + ' ' + statement.participant);
+    }
+
+    if (statement.type === 'end') {
+      return renderIndented(level || 0, 'end');
+    }
+
+    if (/^(loop|alt|else|opt|par|and)$/.test(statement.type)) {
+      return renderIndented(level || 0, statement.type + (statement.text ? ' ' + statement.text : ''));
+    }
+
+    return '';
+  }
+
   function generateSequence(model) {
     if (!model) return '';
 
@@ -45,17 +86,48 @@
       }
     }
 
-    for (var j = 0; j < messages.length; j++) {
-      var message = messages[j];
-      if (!message || !message.from || !message.to) continue;
-      lines.push(
-        '    ' +
-        message.from +
-        (message.operator || SequenceMessageCodec.DEFAULT_OPERATOR) +
-        message.to +
-        ': ' +
-        (message.text || '')
-      );
+    var statements = model.statements || [];
+    if (statements.length) {
+      var messageCursor = 0;
+      var depth = 0;
+      for (var j = 0; j < statements.length; j++) {
+        var statement = statements[j];
+        var line = '';
+        var level = depth;
+        if (statement && (statement.type === 'else' || statement.type === 'and' || statement.type === 'end')) {
+          level = Math.max(0, depth - 1);
+        }
+        if (statement && statement.type === 'message') {
+          line = renderStatement(statement, messages[messageCursor] || statement.message, level);
+          messageCursor++;
+        } else {
+          line = renderStatement(statement, null, level);
+        }
+
+        if (statement && /^(loop|alt|opt|par)$/.test(statement.type)) {
+          depth++;
+        } else if (statement && /^(else|and)$/.test(statement.type)) {
+          depth = level + 1;
+        } else if (statement && statement.type === 'end') {
+          depth = level;
+        }
+
+        if (line) lines.push(line);
+      }
+
+      for (; messageCursor < messages.length; messageCursor++) {
+        var trailing = renderMessage(messages[messageCursor], depth);
+        if (trailing) lines.push(trailing);
+      }
+      return lines.join('\n');
+    }
+
+    for (var k = 0; k < messages.length; k++) {
+      var message = messages[k];
+      var messageLine = renderMessage(message);
+      if (messageLine) {
+        lines.push(messageLine);
+      }
     }
 
     return lines.join('\n');
