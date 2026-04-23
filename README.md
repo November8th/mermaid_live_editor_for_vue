@@ -14,15 +14,17 @@
 ```text
 gui-editor/
 ├─ src/
-│  ├─ components/    # 에디터, 툴바, 프리뷰 컴포넌트
-│  │  └─ mixins/     # LiveEditor / FullEditor 공통 액션
-│  ├─ actions/       # SVG 상호작용 처리 로직
-│  └─ utils/         # codec, export, history, diagnostics, ctx builder
-├─ dist/             # 배포용 번들 결과물
-├─ docs/             # 설계/임베드/기능 문서
-├─ build.js          # 번들 빌드 스크립트
-├─ index.html        # 로컬 확인용 예제 페이지
-└─ GuiEditor.css     # 에디터 스타일
+│  ├─ components/      # 에디터, 툴바, 프리뷰 컴포넌트
+│  │  └─ mixins/       # LiveEditor / FullEditor 공통 액션 wrapper
+│  ├─ actions/         # SVG 상호작용 처리 로직
+│  ├─ representation/  # Mermaid script <-> model 변환
+│  ├─ model-editing/   # 순수 model 수정 로직
+│  └─ utils/           # codec, export, history, diagnostics, ctx builder
+├─ dist/               # 배포용 번들 결과물
+├─ docs/               # 설계/임베드/기능 문서
+├─ build.js            # 번들 빌드 스크립트
+├─ index.html          # 로컬 확인용 예제 페이지
+└─ GuiEditor.css       # 에디터 스타일
 ```
 
 <details>
@@ -102,7 +104,7 @@ script -> model -> svg -> interaction -> model -> script
 예를 들어:
 
 - flowchart에서는 노드와 엣지를 `nodes`, `edges` 배열로 관리합니다.
-- sequence diagram에서는 `participants`, `messages` 구조로 관리합니다.
+- sequence diagram에서는 `participants`, `messages`, `statements` 구조로 관리합니다.
 
 이렇게 구조화된 상태를 기준으로 작업하면:
 
@@ -110,6 +112,7 @@ script -> model -> svg -> interaction -> model -> script
 - 엣지 연결
 - 라벨 편집
 - participant/message 조작
+- block / branch / note 편집
 - undo/redo
 
 같은 기능을 문자열 치환보다 훨씬 안정적으로 처리할 수 있습니다.
@@ -118,9 +121,10 @@ script -> model -> svg -> interaction -> model -> script
 
 이번 구조는 단순히 파일을 보기 좋게 나눈 것이 아니라, 편집 책임을 서로 다른 계층으로 분리하기 위해 정리된 결과입니다.
 
-
-- 순수 규칙과 공통 보조 로직은 `src/utils`로 이동
-- LiveEditor / FullEditor 공통 액션은 `src/components/mixins`로 이동
+- 순수 규칙과 공통 보조 로직은 `src/utils`로 분리
+- script / model 변환은 `src/representation`으로 분리
+- 순수 model 수정은 `src/model-editing`으로 분리
+- LiveEditor / FullEditor 공통 액션 wrapper는 `src/components/mixins`로 유지
 - preview handler가 쓰는 ctx 조립은 `PreviewCtxBuilder`로 분리
 - 공개 임베드용 컴포넌트와 내부 개발용 컴포넌트의 역할을 분리
 
@@ -143,21 +147,21 @@ script -> model -> svg -> interaction -> model -> script
   - 텍스트 편집 영역을 담당합니다.
 - `MermaidPreview.js`
   - Mermaid SVG 렌더, zoom/pan, 인라인 편집, 이벤트 브리지를 담당합니다.
-  - 여전히 가장 많은 상호작용 로직이 모여 있는 파일이지만, 최근 리팩터에서 ctx 조립 책임은 밖으로 분리되었습니다.
+  - 여전히 가장 많은 상호작용 로직이 모여 있는 파일이지만, 최근 구조 정리 이후 순수 model 수정 책임은 밖으로 분리되었습니다.
 - `MermaidToolbar.js`
   - 노드 추가, 메시지 추가, 방향 전환 같은 액션 UI를 담당합니다.
 - `src/components/mixins`
   - LiveEditor / FullEditor가 공유하는 액션과 export, toast 로직을 담당합니다.
-  - 즉, 두 editor 사이 중복되던 행동을 공통화한 계층입니다.
+  - 여기서 flowchart/sequence mixin은 실제 model 수정 로직을 직접 들고 있기보다, `model-editing` 계층을 호출하는 adapter 역할에 가깝습니다.
 
 ### `src/components/mixins`
 
 이 폴더는 editor 두 개가 공통으로 써야 하는 행동을 따로 분리한 위치입니다.
 
 - `flowchartActionsMixin.js`
-  - flowchart 편집 액션을 담당합니다.
+  - flowchart 편집 액션 wrapper를 담당합니다.
 - `sequenceActionsMixin.js`
-  - sequence 편집 액션을 담당합니다.
+  - sequence 편집 액션 wrapper를 담당합니다.
 - `exportMixin.js`
   - export / copy 관련 wrapper를 담당합니다.
 - `toastMixin.js`
@@ -183,8 +187,43 @@ SVG 위 상호작용을 세부 동작 단위로 분리한 계층입니다.
   - sequence diagram SVG의 참여자, 메시지 위치를 추적합니다.
 - `SequenceMessageDragHandler.js`
   - lifeline 기반 메시지 추가 드래그 UI를 담당합니다.
+- `SequenceBlockHandler.js`
+  - block / branch badge와 selection interaction을 담당합니다.
 
 즉 `src/actions`는 "실제 SVG를 어떻게 만지고 반응할 것인가"를 분리한 층입니다.
+
+### `src/representation`
+
+Mermaid 문자열과 내부 model 사이의 변환을 담당합니다.
+
+- `mermaid-parser.js`
+  - flowchart / 공통 Mermaid 문자열을 `model`로 변환합니다.
+- `mermaid-generator.js`
+  - flowchart 중심 Mermaid 문자열 생성기를 담당합니다.
+- `sequence-parser.js`
+  - sequenceDiagram 문자열을 `model`로 변환합니다.
+- `sequence-generator.js`
+  - sequenceDiagram용 Mermaid 문자열 생성기를 담당합니다.
+
+즉 `src/representation`은 `script <-> model` 변환 계층입니다.
+
+### `src/model-editing`
+
+순수 model 수정 로직을 담당합니다.
+
+- `flowchartModelEditing.js`
+  - flowchart model add / update / delete를 담당합니다.
+- `sequenceModelEditing.js`
+  - sequence model add / update / delete / reverse / wrap 등을 담당합니다.
+
+이 계층은:
+
+- Vue를 모르고
+- snapshot을 모르고
+- emit을 모르고
+- 문자열 재생성도 하지 않고
+
+오직 `model`을 받아 `nextModel`을 반환하는 역할만 담당합니다.
 
 ### `src/utils`
 
@@ -211,7 +250,7 @@ SVG 위 상호작용을 세부 동작 단위로 분리한 계층입니다.
 
 ## Architecture
 
-프로젝트 구조는 크게 네 부분으로 나뉩니다.
+프로젝트 구조는 크게 여섯 부분으로 나뉩니다.
 
 ### 1. `src/components`
 
@@ -232,8 +271,8 @@ SVG 위 상호작용을 세부 동작 단위로 분리한 계층입니다.
 
 editor 두 개가 공통으로 쓰는 액션과 부가 기능을 담당합니다.
 
-- flowchart 액션
-- sequence 액션
+- flowchart 액션 wrapper
+- sequence 액션 wrapper
 - export / copy
 - toast
 
@@ -246,7 +285,21 @@ editor 두 개가 공통으로 쓰는 액션과 부가 기능을 담당합니다
 - sequence selection/edit
 - SVG position tracking
 
-### 4. `src/utils`
+### 4. `src/representation`
+
+Mermaid 문자열과 내부 model 사이의 변환을 담당합니다.
+
+- parse
+- generate
+
+### 5. `src/model-editing`
+
+순수 model 수정만 담당합니다.
+
+- flowchart model editing
+- sequence model editing
+
+### 6. `src/utils`
 
 편집 편의 기능과 도메인 규칙을 담당합니다.
 
@@ -258,7 +311,7 @@ editor 두 개가 공통으로 쓰는 액션과 부가 기능을 담당합니다
 - id allocation
 - preview ctx builder
 
-즉 지금 구조는 `component -> action -> util`이 한 방향으로 읽히도록 정리된 상태에 가깝습니다.
+즉 지금 구조는 `component -> action -> representation / model-editing / util`이 역할별로 읽히도록 정리된 상태에 가깝습니다.
 
 ## Parsing and Generation
 
@@ -266,13 +319,18 @@ editor 두 개가 공통으로 쓰는 액션과 부가 기능을 담당합니다
 
 ### flowchart
 
-- parse: `mermaid-parser.js`
-- generate: `mermaid-generator.js`
+- parse: `src/representation/mermaid-parser.js`
+- generate: `src/representation/mermaid-generator.js`
 
 ### sequence
 
-- parse: `sequence-parser.js`
-- generate: `sequence-generator.js`
+- parse: `src/representation/sequence-parser.js`
+- generate: `src/representation/sequence-generator.js`
+
+그리고 GUI 편집 시 실제 model 수정은 아래 계층이 담당합니다.
+
+- `src/model-editing/flowchartModelEditing.js`
+- `src/model-editing/sequenceModelEditing.js`
 
 이 구조 덕분에 노드 추가, 엣지 삭제, 메시지 반전 같은 GUI 조작을 문자열 조작이 아니라 구조 데이터 수정으로 처리할 수 있습니다.
 
@@ -296,25 +354,28 @@ editor 두 개가 공통으로 쓰는 액션과 부가 기능을 담당합니다
 
 현재 프로젝트는 `flowchart`와 `sequenceDiagram`을 모두 지원합니다.
 
-공통 프레임은 유지하되, parser/generator/action 계층에서 타입별로 분기합니다.
+공통 프레임은 유지하되, parser/generator/action/model-editing 계층에서 타입별로 분기합니다.
 
 ### flowchart
 
-- `mermaid-parser.js`
-- `mermaid-generator.js`
+- `src/representation/mermaid-parser.js`
+- `src/representation/mermaid-generator.js`
+- `src/model-editing/flowchartModelEditing.js`
 - `SvgNodeHandler.js`
 - `SvgEdgeHandler.js`
 - `PortDragHandler.js`
 
 ### sequenceDiagram
 
-- `sequence-parser.js`
-- `sequence-generator.js`
+- `src/representation/sequence-parser.js`
+- `src/representation/sequence-generator.js`
+- `src/model-editing/sequenceModelEditing.js`
 - `SequenceSvgHandler.js`
 - `SequencePositionTracker.js`
 - `SequenceMessageDragHandler.js`
+- `SequenceBlockHandler.js`
 
-즉 겉으로는 같은 에디터처럼 보이지만, 내부적으로는 다이어그램 타입에 따라 적절한 파서, 제너레이터, 인터랙션 로직이 연결됩니다.
+즉 겉으로는 같은 에디터처럼 보이지만, 내부적으로는 다이어그램 타입에 따라 적절한 파서, 제너레이터, model 수정 계층, 인터랙션 로직이 연결됩니다.
 
 ## 호스트 프로젝트 입장에서 이해하실 점
 
