@@ -194,21 +194,42 @@
       var allLoopTextEls = this._sortTextElementsByPosition(Array.prototype.slice.call(svgEl.querySelectorAll('.loopText')));
       var usedLoopIndices = {};
       var stmts = model && model.statements;
+      var blockBindings = [];
 
+      // 1차: 모든 block의 메인 title(loop/alt/opt/par text)을 먼저 예약한다.
+      // nested loop title이 outer alt의 branch title로 잘못 소비되지 않도록 한다.
       for (var i = 0; i < blocks.length; i++) {
         var block = blocks[i];
         var labelEl = labelTextEls[i] || null;
         var mainTitleEl = this._findMatchingLoopText(labelEl, allLoopTextEls, usedLoopIndices);
+        blockBindings.push({
+          block: block,
+          labelEl: labelEl,
+          mainTitleEl: mainTitleEl
+        });
+      }
 
+      // 2차: 메인 title을 제외한 나머지 loopText만 branch title에 순서대로 연결한다.
+      for (var j = 0; j < blockBindings.length; j++) {
+        var binding = blockBindings[j];
+        var boundBlock = binding.block;
         var branchTitleEls = [];
         var branchStatements = [];
-        for (var b = 0; b < block.branchIndices.length; b++) {
+        for (var b = 0; b < boundBlock.branchIndices.length; b++) {
           branchTitleEls.push(this._findNextUnusedLoopText(allLoopTextEls, usedLoopIndices));
-          var si = block.branchIndices[b];
+          var si = boundBlock.branchIndices[b];
           branchStatements.push(stmts && stmts[si] ? stmts[si] : {});
         }
 
-        this._attachBlockElementInteractions(svgEl, block, labelEl, mainTitleEl, branchTitleEls, branchStatements, ctx);
+        this._attachBlockElementInteractions(
+          svgEl,
+          boundBlock,
+          binding.labelEl,
+          binding.mainTitleEl,
+          branchTitleEls,
+          branchStatements,
+          ctx
+        );
       }
     },
 

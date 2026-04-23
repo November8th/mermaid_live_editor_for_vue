@@ -1,6 +1,6 @@
 /**
  * gui-editor.component.js
- * Built: 2026-04-23T02:57:25.208Z
+ * Built: 2026-04-23T04:12:52.648Z
  *
  * Concatenation of gui-editor source files (no minification).
  * Requires global Vue 2 and Mermaid loaded separately.
@@ -2057,10 +2057,15 @@
 (function (global) {
   'use strict';
 
+  // Flowchart model을 순수하게 편집하는 계층.
+  // Vue 상태, emit, snapshot 같은 부수효과는 여기서 다루지 않는다.
+
   function sameEdge(edge, from, to) {
     return edge && edge.from === from && edge.to === to;
   }
 
+  // 노드 배열만 바꾸는 공통 패턴을 한곳에 모은다.
+  // updater가 아무 변경도 하지 않으면 기존 model을 그대로 반환한다.
   function updateNodes(model, updater) {
     var nodes = model.nodes || [];
     var nextNodes = [];
@@ -2075,6 +2080,7 @@
     return changed ? Object.assign({}, model, { nodes: nextNodes }) : model;
   }
 
+  // edge 관련 수정도 같은 방식으로 immutable update를 유지한다.
   function updateEdges(model, updater) {
     var edges = model.edges || [];
     var nextEdges = [];
@@ -2090,6 +2096,7 @@
   }
 
   var flowchartModelEditing = {
+    // 새 노드를 model에 추가한다.
     addNode: function (model, data) {
       if (!model || !data || !data.id) return model;
 
@@ -2104,6 +2111,7 @@
       return Object.assign({}, model, { nodes: nodes });
     },
 
+    // self-loop는 동일 edge 중복 추가를 막는다.
     addEdge: function (model, data) {
       if (!model || !data || !data.from || !data.to) return model;
 
@@ -2124,6 +2132,7 @@
       return Object.assign({}, model, { edges: nextEdges });
     },
 
+    // 아래 update* 계열은 각각 한 가지 field 책임만 가진다.
     updateNodeText: function (model, data) {
       if (!model || !data || !data.nodeId) return model;
       return updateNodes(model, function (node) {
@@ -2205,6 +2214,8 @@
       return Object.assign({}, model, { direction: dir });
     },
 
+    // selection payload를 받아 node 또는 edge 삭제를 처리한다.
+    // 삭제 대상이 없으면 원본 model을 그대로 돌려준다.
     deleteSelection: function (model, data) {
       if (!model || !data) return model;
 
@@ -2240,6 +2251,10 @@
 (function (global) {
   'use strict';
 
+  // Sequence model을 순수하게 편집하는 계층.
+  // 여기서는 Vue 컴포넌트 상태나 script 갱신을 모르고 nextModel만 계산한다.
+
+  // sequence 쪽은 patch 적용 뒤 activation 정규화와 explicitParticipants 보정이 항상 필요하다.
   function finish(model, patch) {
     var nextModel = Object.assign({}, model, patch);
     nextModel.explicitParticipants = true;
@@ -2249,6 +2264,7 @@
     return nextModel;
   }
 
+  // participant 배열만 바뀌는 수정은 이 helper를 통해 immutable update한다.
   function updateParticipants(model, updater) {
     var participants = model.participants || [];
     var nextParticipants = [];
@@ -2263,6 +2279,7 @@
     return changed ? finish(model, { participants: nextParticipants }) : model;
   }
 
+  // message 배열 수정도 같은 패턴으로 공통화한다.
   function updateMessages(model, updater) {
     var messages = model.messages || [];
     var nextMessages = [];
@@ -2278,6 +2295,7 @@
   }
 
   var sequenceModelEditing = {
+    // participant / actor 추가는 kind만 다르고 같은 규칙을 공유한다.
     addParticipant: function (model, data) {
       if (!model || !data || !data.id) return model;
       var participants = (model.participants || []).slice();
@@ -2320,6 +2338,7 @@
       return finish(model, { participants: participants });
     },
 
+    // payload 형태에 따라 from/to 기본값과 삽입 위치를 계산해 새 message를 만든다.
     addMessage: function (model, payload) {
       if (!model) return model;
       var participants = model.participants || [];
@@ -2411,6 +2430,7 @@
       });
     },
 
+    // line type은 operator 본문만 바꾸고 activation suffix(+/-)는 유지한다.
     setMessageLineType: function (model, data) {
       if (!model || !data || data.index === null || data.index === undefined) return model;
       return updateMessages(model, function (message, index) {
@@ -2420,6 +2440,7 @@
       });
     },
 
+    // block / branch / note 계열은 statements 트리를 갱신하는 편집이다.
     addBranch: function (model, data) {
       if (!model || !data || !data.keyword || !data.messageIndices || !data.messageIndices.length) return model;
       return finish(model, {
@@ -2494,6 +2515,7 @@
       });
     },
 
+    // selection payload를 보고 participant / block / note / message 삭제를 분기한다.
     deleteSelection: function (model, data) {
       if (!model || !data) return model;
 
@@ -5030,21 +5052,42 @@
       var allLoopTextEls = this._sortTextElementsByPosition(Array.prototype.slice.call(svgEl.querySelectorAll('.loopText')));
       var usedLoopIndices = {};
       var stmts = model && model.statements;
+      var blockBindings = [];
 
+      // 1차: 모든 block의 메인 title(loop/alt/opt/par text)을 먼저 예약한다.
+      // nested loop title이 outer alt의 branch title로 잘못 소비되지 않도록 한다.
       for (var i = 0; i < blocks.length; i++) {
         var block = blocks[i];
         var labelEl = labelTextEls[i] || null;
         var mainTitleEl = this._findMatchingLoopText(labelEl, allLoopTextEls, usedLoopIndices);
+        blockBindings.push({
+          block: block,
+          labelEl: labelEl,
+          mainTitleEl: mainTitleEl
+        });
+      }
 
+      // 2차: 메인 title을 제외한 나머지 loopText만 branch title에 순서대로 연결한다.
+      for (var j = 0; j < blockBindings.length; j++) {
+        var binding = blockBindings[j];
+        var boundBlock = binding.block;
         var branchTitleEls = [];
         var branchStatements = [];
-        for (var b = 0; b < block.branchIndices.length; b++) {
+        for (var b = 0; b < boundBlock.branchIndices.length; b++) {
           branchTitleEls.push(this._findNextUnusedLoopText(allLoopTextEls, usedLoopIndices));
-          var si = block.branchIndices[b];
+          var si = boundBlock.branchIndices[b];
           branchStatements.push(stmts && stmts[si] ? stmts[si] : {});
         }
 
-        this._attachBlockElementInteractions(svgEl, block, labelEl, mainTitleEl, branchTitleEls, branchStatements, ctx);
+        this._attachBlockElementInteractions(
+          svgEl,
+          boundBlock,
+          binding.labelEl,
+          binding.mainTitleEl,
+          branchTitleEls,
+          branchStatements,
+          ctx
+        );
       }
     },
 
