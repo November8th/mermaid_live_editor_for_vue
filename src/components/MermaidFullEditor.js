@@ -82,15 +82,6 @@ Vue.component('mermaid-full-editor', {
       if (this.$refs.preview) this.$refs.preview.scheduleFit();
     },
 
-    _updateSequenceModel: function (patch) {
-      var nextModel = Object.assign({}, this.model, patch);
-      nextModel.explicitParticipants = true;
-      if (nextModel.messages) {
-        nextModel.messages = SequenceMessageCodec.normalizeActivations(nextModel.messages);
-      }
-      this.model = nextModel;
-      this.updateScriptFromModel();
-    },
 
     _snapshot: function () { if (this.history) this.history.snapshot(this.model); },
 

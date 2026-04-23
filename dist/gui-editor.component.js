@@ -1,6 +1,6 @@
 /**
  * gui-editor.component.js
- * Built: 2026-04-21T07:53:37.463Z
+ * Built: 2026-04-23T02:57:25.208Z
  *
  * Concatenation of gui-editor source files (no minification).
  * Requires global Vue 2 and Mermaid loaded separately.
@@ -17,8 +17,8 @@
 /* ===== src/utils/SequenceMessageCodec.js ===== */
 /**
  * Sequence 메시지 operator 관련 규칙을 한 곳에서 관리하는 공용 헬퍼
- * - sequence-parser.js  : MESSAGE_RE 사용
- * - sequence-generator.js : DEFAULT_OPERATOR 사용
+ * - representation/sequence-parser.js  : MESSAGE_RE 사용
+ * - representation/sequence-generator.js : DEFAULT_OPERATOR 사용
  * - SequenceSvgHandler.js : parseOperator / toggleLineStyle 사용
  * - MermaidPreview.js     : LINE_TYPE_OPTIONS 사용
  */
@@ -724,7 +724,7 @@
 })(typeof window !== 'undefined' ? window : this);
 
 
-/* ===== src/sequence-parser.js ===== */
+/* ===== src/representation/sequence-parser.js ===== */
 /**
  * Mermaid 시퀀스 다이어그램 파서
  * sequenceDiagram 문법을 내부 모델로 변환한다.
@@ -999,7 +999,7 @@
 })(typeof window !== 'undefined' ? window : this);
 
 
-/* ===== src/sequence-generator.js ===== */
+/* ===== src/representation/sequence-generator.js ===== */
 /**
  * Mermaid 시퀀스 다이어그램 생성기
  * 내부 모델을 sequenceDiagram 스크립트로 직렬화한다.
@@ -1328,7 +1328,7 @@
 })(typeof window !== 'undefined' ? window : this);
 
 
-/* ===== src/mermaid-parser.js ===== */
+/* ===== src/representation/mermaid-parser.js ===== */
 (function (global) {
   'use strict';
 
@@ -1772,7 +1772,7 @@
 })(typeof window !== 'undefined' ? window : this);
 
 
-/* ===== src/mermaid-generator.js ===== */
+/* ===== src/representation/mermaid-generator.js ===== */
 (function (global) {
   'use strict';
 
@@ -2050,6 +2050,507 @@
     generateNode: generateNode,
     findNode: findNode
   };
+})(typeof window !== 'undefined' ? window : this);
+
+
+/* ===== src/model-editing/flowchartModelEditing.js ===== */
+(function (global) {
+  'use strict';
+
+  function sameEdge(edge, from, to) {
+    return edge && edge.from === from && edge.to === to;
+  }
+
+  function updateNodes(model, updater) {
+    var nodes = model.nodes || [];
+    var nextNodes = [];
+    var changed = false;
+
+    for (var i = 0; i < nodes.length; i++) {
+      var nextNode = updater(nodes[i], i);
+      nextNodes.push(nextNode);
+      if (nextNode !== nodes[i]) changed = true;
+    }
+
+    return changed ? Object.assign({}, model, { nodes: nextNodes }) : model;
+  }
+
+  function updateEdges(model, updater) {
+    var edges = model.edges || [];
+    var nextEdges = [];
+    var changed = false;
+
+    for (var i = 0; i < edges.length; i++) {
+      var nextEdge = updater(edges[i], i);
+      nextEdges.push(nextEdge);
+      if (nextEdge !== edges[i]) changed = true;
+    }
+
+    return changed ? Object.assign({}, model, { edges: nextEdges }) : model;
+  }
+
+  var flowchartModelEditing = {
+    addNode: function (model, data) {
+      if (!model || !data || !data.id) return model;
+
+      var nodes = (model.nodes || []).slice();
+      var nextNode = {
+        id: data.id,
+        text: data.text || 'Node',
+        shape: data.shape || 'rect'
+      };
+      if (data.fill) nextNode.fill = data.fill;
+      nodes.push(nextNode);
+      return Object.assign({}, model, { nodes: nodes });
+    },
+
+    addEdge: function (model, data) {
+      if (!model || !data || !data.from || !data.to) return model;
+
+      var edges = model.edges || [];
+      if (data.from === data.to) {
+        for (var i = 0; i < edges.length; i++) {
+          if (sameEdge(edges[i], data.from, data.to)) return model;
+        }
+      }
+
+      var nextEdges = edges.slice();
+      nextEdges.push({
+        from: data.from,
+        to: data.to,
+        text: data.text || '',
+        type: data.type || '-->'
+      });
+      return Object.assign({}, model, { edges: nextEdges });
+    },
+
+    updateNodeText: function (model, data) {
+      if (!model || !data || !data.nodeId) return model;
+      return updateNodes(model, function (node) {
+        return node.id === data.nodeId
+          ? Object.assign({}, node, { text: data.text })
+          : node;
+      });
+    },
+
+    updateNodeShape: function (model, data) {
+      if (!model || !data || !data.nodeId) return model;
+      return updateNodes(model, function (node) {
+        return node.id === data.nodeId
+          ? Object.assign({}, node, { shape: data.shape })
+          : node;
+      });
+    },
+
+    updateNodeStyle: function (model, data) {
+      if (!model || !data || !data.nodeId) return model;
+      return updateNodes(model, function (node) {
+        if (node.id !== data.nodeId) return node;
+        return Object.assign({}, node, {
+          text: data.text,
+          fill: data.fill
+        });
+      });
+    },
+
+    updateNodeFill: function (model, data) {
+      if (!model || !data || !data.nodeId) return model;
+      return updateNodes(model, function (node) {
+        return node.id === data.nodeId
+          ? Object.assign({}, node, { fill: data.fill })
+          : node;
+      });
+    },
+
+    updateEdgeText: function (model, data) {
+      if (!model || !data || data.index === null || data.index === undefined) return model;
+      return updateEdges(model, function (edge, index) {
+        return index === data.index
+          ? Object.assign({}, edge, { text: data.text })
+          : edge;
+      });
+    },
+
+    updateEdgeType: function (model, data) {
+      if (!model || !data || data.index === null || data.index === undefined) return model;
+      return updateEdges(model, function (edge, index) {
+        return index === data.index
+          ? Object.assign({}, edge, { type: data.type })
+          : edge;
+      });
+    },
+
+    updateEdgeStyle: function (model, data) {
+      if (!model || !data || data.index === null || data.index === undefined) return model;
+      return updateEdges(model, function (edge, index) {
+        if (index !== data.index) return edge;
+        return Object.assign({}, edge, {
+          text: data.text,
+          color: data.color
+        });
+      });
+    },
+
+    updateEdgeColor: function (model, data) {
+      if (!model || !data || data.index === null || data.index === undefined) return model;
+      return updateEdges(model, function (edge, index) {
+        return index === data.index
+          ? Object.assign({}, edge, { color: data.color })
+          : edge;
+      });
+    },
+
+    changeDirection: function (model, dir) {
+      if (!model || !dir || model.direction === dir) return model;
+      return Object.assign({}, model, { direction: dir });
+    },
+
+    deleteSelection: function (model, data) {
+      if (!model || !data) return model;
+
+      if (data.nodeId) {
+        var nodes = (model.nodes || []).filter(function (node) {
+          return node.id !== data.nodeId;
+        });
+        var edges = (model.edges || []).filter(function (edge) {
+          return edge.from !== data.nodeId && edge.to !== data.nodeId;
+        });
+        if (nodes.length === (model.nodes || []).length && edges.length === (model.edges || []).length) {
+          return model;
+        }
+        return Object.assign({}, model, { nodes: nodes, edges: edges });
+      }
+
+      if (data.edgeIndex !== null && data.edgeIndex !== undefined) {
+        if (!model.edges || data.edgeIndex < 0 || data.edgeIndex >= model.edges.length) return model;
+        var nextEdges = model.edges.slice();
+        nextEdges.splice(data.edgeIndex, 1);
+        return Object.assign({}, model, { edges: nextEdges });
+      }
+
+      return model;
+    }
+  };
+
+  global.flowchartModelEditing = flowchartModelEditing;
+})(typeof window !== 'undefined' ? window : this);
+
+
+/* ===== src/model-editing/sequenceModelEditing.js ===== */
+(function (global) {
+  'use strict';
+
+  function finish(model, patch) {
+    var nextModel = Object.assign({}, model, patch);
+    nextModel.explicitParticipants = true;
+    if (nextModel.messages) {
+      nextModel.messages = SequenceMessageCodec.normalizeActivations(nextModel.messages);
+    }
+    return nextModel;
+  }
+
+  function updateParticipants(model, updater) {
+    var participants = model.participants || [];
+    var nextParticipants = [];
+    var changed = false;
+
+    for (var i = 0; i < participants.length; i++) {
+      var nextParticipant = updater(participants[i], i);
+      nextParticipants.push(nextParticipant);
+      if (nextParticipant !== participants[i]) changed = true;
+    }
+
+    return changed ? finish(model, { participants: nextParticipants }) : model;
+  }
+
+  function updateMessages(model, updater) {
+    var messages = model.messages || [];
+    var nextMessages = [];
+    var changed = false;
+
+    for (var i = 0; i < messages.length; i++) {
+      var nextMessage = updater(messages[i], i);
+      nextMessages.push(nextMessage);
+      if (nextMessage !== messages[i]) changed = true;
+    }
+
+    return changed ? finish(model, { messages: nextMessages }) : model;
+  }
+
+  var sequenceModelEditing = {
+    addParticipant: function (model, data) {
+      if (!model || !data || !data.id) return model;
+      var participants = (model.participants || []).slice();
+      participants.push({
+        id: data.id,
+        label: data.label || data.id,
+        kind: data.kind || 'participant'
+      });
+      return finish(model, { participants: participants });
+    },
+
+    toggleParticipantKind: function (model, data) {
+      if (!model || !data || !data.participantId) return model;
+      return updateParticipants(model, function (participant) {
+        if (participant.id !== data.participantId) return participant;
+        return Object.assign({}, participant, {
+          kind: participant.kind === 'actor' ? 'participant' : 'actor'
+        });
+      });
+    },
+
+    moveParticipant: function (model, data) {
+      if (!model || !data || !data.participantId) return model;
+      var participants = (model.participants || []).slice();
+      var index = -1;
+      for (var i = 0; i < participants.length; i++) {
+        if (participants[i].id === data.participantId) {
+          index = i;
+          break;
+        }
+      }
+      if (index === -1) return model;
+
+      var swapIndex = data.direction === 'left' ? index - 1 : index + 1;
+      if (swapIndex < 0 || swapIndex >= participants.length) return model;
+
+      var temp = participants[index];
+      participants[index] = participants[swapIndex];
+      participants[swapIndex] = temp;
+      return finish(model, { participants: participants });
+    },
+
+    addMessage: function (model, payload) {
+      if (!model) return model;
+      var participants = model.participants || [];
+      if (!participants.length) return model;
+
+      var fromId = participants[0].id;
+      var toId = participants[Math.min(1, participants.length - 1)].id;
+      var messageText = 'Message';
+
+      if (payload && payload.fromId) fromId = payload.fromId;
+      if (payload && payload.toId) toId = payload.toId;
+      if (payload && payload.text) messageText = payload.text;
+
+      if (payload && payload.participantId && !payload.fromId) {
+        fromId = payload.participantId;
+        for (var i = 0; i < participants.length; i++) {
+          if (participants[i].id === payload.participantId) {
+            toId = participants[(i + 1) % participants.length].id;
+            break;
+          }
+        }
+      }
+
+      var messages = (model.messages || []).slice();
+      var insertAt = messages.length;
+      if (payload && payload.insertIndex !== null && payload.insertIndex !== undefined) {
+        insertAt = Math.max(0, Math.min(messages.length, payload.insertIndex));
+      } else if (payload && payload.afterIndex !== null && payload.afterIndex !== undefined) {
+        insertAt = Math.min(messages.length, payload.afterIndex + 1);
+      }
+
+      var newMessage = {
+        from: fromId,
+        to: toId,
+        operator: '->>',
+        text: messageText
+      };
+      messages.splice(insertAt, 0, newMessage);
+
+      return finish(model, {
+        messages: messages,
+        statements: SequenceStatementUtils.insertMessageStatement(model, insertAt, newMessage)
+      });
+    },
+
+    updateParticipantText: function (model, data) {
+      if (!model || !data || !data.participantId) return model;
+      return updateParticipants(model, function (participant) {
+        return participant.id === data.participantId
+          ? Object.assign({}, participant, { label: data.text })
+          : participant;
+      });
+    },
+
+    updateMessageText: function (model, data) {
+      if (!model || !data || data.index === null || data.index === undefined) return model;
+      return updateMessages(model, function (message, index) {
+        return index === data.index
+          ? Object.assign({}, message, { text: data.text })
+          : message;
+      });
+    },
+
+    reverseMessage: function (model, index) {
+      if (!model || index === null || index === undefined) return model;
+      return updateMessages(model, function (message, messageIndex) {
+        if (messageIndex !== index) return message;
+        return Object.assign({}, message, {
+          from: message.to,
+          to: message.from
+        });
+      });
+    },
+
+    toggleAutonumber: function (model) {
+      if (!model) return model;
+      return finish(model, { autonumber: !model.autonumber });
+    },
+
+    toggleMessageLineType: function (model, index) {
+      if (!model || index === null || index === undefined) return model;
+      return updateMessages(model, function (message, messageIndex) {
+        if (messageIndex !== index) return message;
+        return Object.assign({}, message, {
+          operator: SequenceMessageCodec.toggleLineStyle(
+            message.operator || SequenceMessageCodec.DEFAULT_OPERATOR
+          )
+        });
+      });
+    },
+
+    setMessageLineType: function (model, data) {
+      if (!model || !data || data.index === null || data.index === undefined) return model;
+      return updateMessages(model, function (message, index) {
+        if (index !== data.index) return message;
+        var suffix = /[+-]$/.test(message.operator || '') ? message.operator.slice(-1) : '';
+        return Object.assign({}, message, { operator: data.operator + suffix });
+      });
+    },
+
+    addBranch: function (model, data) {
+      if (!model || !data || !data.keyword || !data.messageIndices || !data.messageIndices.length) return model;
+      return finish(model, {
+        statements: SequenceStatementUtils.insertBranchStatement(
+          model,
+          data.messageIndices,
+          data.keyword,
+          data.text || ''
+        )
+      });
+    },
+
+    wrapMessagesInBlock: function (model, data) {
+      var messageIndices = data && data.messageIndices ? data.messageIndices : [];
+      if (!model || !data || !data.kind || !messageIndices.length) return model;
+      return finish(model, {
+        statements: SequenceStatementUtils.wrapMessagesInBlock(
+          model,
+          messageIndices,
+          data.kind,
+          data.text || ''
+        )
+      });
+    },
+
+    updateBlockText: function (model, data) {
+      if (!model || !data || !data.blockId) return model;
+      var nextText = String(data.text || '').trim();
+      return finish(model, {
+        statements: nextText
+          ? SequenceStatementUtils.updateBlockText(model, data.blockId, nextText)
+          : SequenceStatementUtils.deleteBlock(model, data.blockId)
+      });
+    },
+
+    updateBranchText: function (model, data) {
+      if (!model || !data || data.statementIndex === null || data.statementIndex === undefined) return model;
+      var nextText = String(data.text || '').trim();
+      return finish(model, {
+        statements: nextText
+          ? SequenceStatementUtils.updateBranchText(model, data.statementIndex, data.text || '')
+          : SequenceStatementUtils.deleteBranchStatement(model, data.statementIndex)
+      });
+    },
+
+    changeBlockType: function (model, data) {
+      if (!model || !data || !data.blockId || !data.kind) return model;
+      return finish(model, {
+        statements: SequenceStatementUtils.changeBlockKind(model, data.blockId, data.kind)
+      });
+    },
+
+    addNote: function (model, data) {
+      if (!model || !data || !data.participantId) return model;
+      return finish(model, {
+        statements: SequenceStatementUtils.addNoteStatement(
+          model,
+          data.participantId,
+          data.insertIndex !== undefined ? data.insertIndex : null,
+          data.text || 'Note'
+        )
+      });
+    },
+
+    updateNoteText: function (model, data) {
+      if (!model || !data || data.statementIndex === null || data.statementIndex === undefined) return model;
+      var nextText = String(data.text || '').trim();
+      return finish(model, {
+        statements: nextText
+          ? SequenceStatementUtils.updateNoteText(model, data.statementIndex, nextText)
+          : SequenceStatementUtils.deleteNoteStatement(model, data.statementIndex)
+      });
+    },
+
+    deleteSelection: function (model, data) {
+      if (!model || !data) return model;
+
+      if (data.sequenceParticipantId) {
+        var removedIndices = [];
+        var originalMessages = model.messages || [];
+        var participants = (model.participants || []).filter(function (participant) {
+          return participant.id !== data.sequenceParticipantId;
+        });
+        var messages = originalMessages.filter(function (message, index) {
+          var keep = message.from !== data.sequenceParticipantId && message.to !== data.sequenceParticipantId;
+          if (!keep) removedIndices.push(index);
+          return keep;
+        });
+        if (participants.length === (model.participants || []).length && messages.length === originalMessages.length) {
+          return model;
+        }
+        return finish(model, {
+          participants: participants,
+          messages: messages,
+          statements: SequenceStatementUtils.removeParticipantStatements(
+            model,
+            data.sequenceParticipantId,
+            removedIndices
+          )
+        });
+      }
+
+      if (data.sequenceBlockId) {
+        return finish(model, {
+          statements: SequenceStatementUtils.deleteBlock(model, data.sequenceBlockId)
+        });
+      }
+
+      if (data.sequenceNoteStatementIndex !== null && data.sequenceNoteStatementIndex !== undefined) {
+        return finish(model, {
+          statements: SequenceStatementUtils.deleteNoteStatement(model, data.sequenceNoteStatementIndex)
+        });
+      }
+
+      if (data.sequenceMessageIndex !== null && data.sequenceMessageIndex !== undefined) {
+        if (!model.messages || data.sequenceMessageIndex < 0 || data.sequenceMessageIndex >= model.messages.length) {
+          return model;
+        }
+        var nextMessages = model.messages.slice();
+        nextMessages.splice(data.sequenceMessageIndex, 1);
+        return finish(model, {
+          messages: nextMessages,
+          statements: SequenceStatementUtils.removeMessageStatements(model, [data.sequenceMessageIndex])
+        });
+      }
+
+      return model;
+    }
+  };
+
+  global.sequenceModelEditing = sequenceModelEditing;
 })(typeof window !== 'undefined' ? window : this);
 
 
@@ -4977,12 +5478,12 @@
 /* ===== src/components/mixins/flowchartActionsMixin.js ===== */
 /**
  * flowchartActionsMixin
- * LiveEditor와 FullEditor가 공유하는 flowchart 액션을 믹스인으로 추출한 것.
- * 이전에는 같은 메서드가 양쪽 컴포넌트에 복붙돼 있어 수정할 때마다 둘 다 손봐야 했다.
+ * Container component가 flowchartModelEditing을 사용할 수 있도록 감싼 얇은 wrapper.
  *
  * 호출부 요구사항:
  *   - data: model (type, nodes, edges, direction)
  *   - data: nodeIdAllocator (IdAllocator 인스턴스)
+ *   - data: script
  *   - methods: _snapshot, updateScriptFromModel, _schedulePreviewFit
  *   - computed: isFlowchart
  *
@@ -4993,9 +5494,18 @@
 
   global.flowchartActionsMixin = {
     methods: {
+      _applyFlowchartEdit: function (nextModel, options) {
+        if (!nextModel || nextModel === this.model) return false;
+        this._snapshot();
+        this.model = nextModel;
+        this.updateScriptFromModel();
+        if (options && options.fitPreview) this._schedulePreviewFit();
+        return true;
+      },
+
       addNode: function (shape) {
         if (!this.isFlowchart) return;
-        this._snapshot();
+
         var nodeShape = shape;
         var nodeText = 'Node';
         var nodeFill = '';
@@ -5007,146 +5517,77 @@
         }
 
         if (!nodeShape) nodeShape = 'rect';
-        var newId   = this.nodeIdAllocator.next(this.script, this.model.nodes);
-        var newNode = { id: newId, text: nodeText, shape: nodeShape };
-        if (nodeFill) newNode.fill = nodeFill;
-        var nodes   = this.model.nodes.slice();
-        nodes.push(newNode);
-        this.model = Object.assign({}, this.model, { nodes: nodes });
-        this.updateScriptFromModel();
-        this._schedulePreviewFit();
+
+        this._applyFlowchartEdit(
+          flowchartModelEditing.addNode(this.model, {
+            id: this.nodeIdAllocator.next(this.script, this.model.nodes),
+            text: nodeText,
+            shape: nodeShape,
+            fill: nodeFill
+          }),
+          { fitPreview: true }
+        );
       },
 
       addEdge: function (data) {
         if (!this.isFlowchart) return;
-        var edges = this.model.edges;
-        if (data.from === data.to) {
-          for (var i = 0; i < edges.length; i++) {
-            if (edges[i].from === data.from && edges[i].to === data.to) return;
-          }
-        }
-        this._snapshot();
-        var newEdges = edges.slice();
-        newEdges.push({ from: data.from, to: data.to, text: '', type: '-->' });
-        this.model = Object.assign({}, this.model, { edges: newEdges });
-        this.updateScriptFromModel();
+        this._applyFlowchartEdit(flowchartModelEditing.addEdge(this.model, data));
       },
 
       updateNodeText: function (data) {
         if (!this.isFlowchart) return;
-        this._snapshot();
-        var nodes = this.model.nodes.map(function (n) {
-          return n.id === data.nodeId ? Object.assign({}, n, { text: data.text }) : n;
-        });
-        this.model = Object.assign({}, this.model, { nodes: nodes });
-        this.updateScriptFromModel();
+        this._applyFlowchartEdit(flowchartModelEditing.updateNodeText(this.model, data));
       },
 
       updateNodeShape: function (data) {
         if (!this.isFlowchart) return;
-        this._snapshot();
-        var nodes = this.model.nodes.map(function (n) {
-          return n.id === data.nodeId ? Object.assign({}, n, { shape: data.shape }) : n;
-        });
-        this.model = Object.assign({}, this.model, { nodes: nodes });
-        this.updateScriptFromModel();
+        this._applyFlowchartEdit(flowchartModelEditing.updateNodeShape(this.model, data));
       },
 
       updateNodeStyle: function (data) {
         if (!this.isFlowchart) return;
-        this._snapshot();
-        var nodes = this.model.nodes.map(function (n) {
-          if (n.id !== data.nodeId) return n;
-          return Object.assign({}, n, {
-            text: data.text,
-            fill: data.fill
-          });
-        });
-        this.model = Object.assign({}, this.model, { nodes: nodes });
-        this.updateScriptFromModel();
+        this._applyFlowchartEdit(flowchartModelEditing.updateNodeStyle(this.model, data));
       },
 
       updateNodeFill: function (data) {
         if (!this.isFlowchart) return;
-        this._snapshot();
-        var nodes = this.model.nodes.map(function (n) {
-          if (n.id !== data.nodeId) return n;
-          return Object.assign({}, n, { fill: data.fill });
-        });
-        this.model = Object.assign({}, this.model, { nodes: nodes });
-        this.updateScriptFromModel();
+        this._applyFlowchartEdit(flowchartModelEditing.updateNodeFill(this.model, data));
       },
 
       updateEdgeText: function (data) {
         if (!this.isFlowchart) return;
-        this._snapshot();
-        var edges = this.model.edges.map(function (e, idx) {
-          return idx === data.index ? Object.assign({}, e, { text: data.text }) : e;
-        });
-        this.model = Object.assign({}, this.model, { edges: edges });
-        this.updateScriptFromModel();
+        this._applyFlowchartEdit(flowchartModelEditing.updateEdgeText(this.model, data));
       },
 
       updateEdgeType: function (data) {
         if (!this.isFlowchart) return;
-        this._snapshot();
-        var edges = this.model.edges.map(function (e, idx) {
-          return idx !== data.index ? e : Object.assign({}, e, { type: data.type });
-        });
-        this.model = Object.assign({}, this.model, { edges: edges });
-        this.updateScriptFromModel();
+        this._applyFlowchartEdit(flowchartModelEditing.updateEdgeType(this.model, data));
       },
 
       updateEdgeStyle: function (data) {
         if (!this.isFlowchart) return;
-        this._snapshot();
-        var edges = this.model.edges.map(function (e, idx) {
-          if (idx !== data.index) return e;
-          return Object.assign({}, e, {
-            text: data.text,
-            color: data.color
-          });
-        });
-        this.model = Object.assign({}, this.model, { edges: edges });
-        this.updateScriptFromModel();
+        this._applyFlowchartEdit(flowchartModelEditing.updateEdgeStyle(this.model, data));
       },
 
       updateEdgeColor: function (data) {
         if (!this.isFlowchart) return;
-        this._snapshot();
-        var edges = this.model.edges.map(function (e, idx) {
-          if (idx !== data.index) return e;
-          return Object.assign({}, e, { color: data.color });
-        });
-        this.model = Object.assign({}, this.model, { edges: edges });
-        this.updateScriptFromModel();
+        this._applyFlowchartEdit(flowchartModelEditing.updateEdgeColor(this.model, data));
       },
 
       changeDirection: function (dir) {
         if (!this.isFlowchart) return;
-        this._snapshot();
-        this.model = Object.assign({}, this.model, { direction: dir });
-        this.updateScriptFromModel();
-        this._schedulePreviewFit();
+        this._applyFlowchartEdit(
+          flowchartModelEditing.changeDirection(this.model, dir),
+          { fitPreview: true }
+        );
       },
 
-      // deleteSelected dispatcher가 flowchart 분기일 때 호출. _snapshot은 dispatcher 쪽에서 이미 찍었음.
+      // deleteSelected dispatcher가 flowchart 분기를 여기로 위임. _snapshot은 dispatcher 쪽에 이미 찍혔음.
       _deleteFlowchartSelection: function (data) {
-        if (data.nodeId) {
-          var nodes = this.model.nodes.filter(function (n) { return n.id !== data.nodeId; });
-          var edges = this.model.edges.filter(function (e) {
-            return e.from !== data.nodeId && e.to !== data.nodeId;
-          });
-          this.model = Object.assign({}, this.model, { nodes: nodes, edges: edges });
-          return true;
-        }
-        if (data.edgeIndex !== null && data.edgeIndex !== undefined) {
-          var ec = this.model.edges.slice();
-          ec.splice(data.edgeIndex, 1);
-          this.model = Object.assign({}, this.model, { edges: ec });
-          return true;
-        }
-        return false;
+        var nextModel = flowchartModelEditing.deleteSelection(this.model, data);
+        if (!nextModel || nextModel === this.model) return false;
+        this.model = nextModel;
+        return true;
       }
     }
   };
@@ -5157,13 +5598,14 @@
 /* ===== src/components/mixins/sequenceActionsMixin.js ===== */
 /**
  * sequenceActionsMixin
- * LiveEditor와 FullEditor가 공유하는 sequence diagram 액션 믹스인.
+ * Container component가 sequenceModelEditing을 사용할 수 있도록 감싼 얇은 wrapper.
  * flowchartActionsMixin과 세트로 사용한다.
  *
  * 호출부 요구사항:
  *   - data: model (type, participants, messages, autonumber)
  *   - data: participantIdAllocator (IdAllocator 인스턴스)
- *   - methods: _snapshot, _updateSequenceModel
+ *   - data: script
+ *   - methods: _snapshot, updateScriptFromModel
  *   - computed: isFlowchart
  *
  * deleteSelected dispatcher는 컴포넌트에 남고, sequence 삭제 분기만 여기서 처리.
@@ -5173,281 +5615,119 @@
 
   global.sequenceActionsMixin = {
     methods: {
+      _applySequenceEdit: function (nextModel) {
+        if (!nextModel || nextModel === this.model) return false;
+        this._snapshot();
+        this.model = nextModel;
+        this.updateScriptFromModel();
+        return true;
+      },
+
       addSequenceParticipant: function () {
         if (this.isFlowchart) return;
-        this._snapshot();
-        var id = this.participantIdAllocator.next(this.script, this.model.participants);
-        var participants = (this.model.participants || []).slice();
-        participants.push({ id: id, label: 'Participant ' + this.participantIdAllocator.counter, kind: 'participant' });
-        this._updateSequenceModel({ participants: participants });
+        this._applySequenceEdit(sequenceModelEditing.addParticipant(this.model, {
+          id: this.participantIdAllocator.next(this.script, this.model.participants),
+          label: 'Participant ' + this.participantIdAllocator.counter,
+          kind: 'participant'
+        }));
       },
 
       addSequenceActor: function () {
         if (this.isFlowchart) return;
-        this._snapshot();
-        var id = this.participantIdAllocator.next(this.script, this.model.participants);
-        var participants = (this.model.participants || []).slice();
-        participants.push({ id: id, label: 'Actor ' + this.participantIdAllocator.counter, kind: 'actor' });
-        this._updateSequenceModel({ participants: participants });
+        this._applySequenceEdit(sequenceModelEditing.addParticipant(this.model, {
+          id: this.participantIdAllocator.next(this.script, this.model.participants),
+          label: 'Actor ' + this.participantIdAllocator.counter,
+          kind: 'actor'
+        }));
       },
 
       toggleParticipantKind: function (data) {
         if (this.isFlowchart) return;
-        this._snapshot();
-        var participants = (this.model.participants || []).map(function (p) {
-          if (p.id !== data.participantId) return p;
-          return Object.assign({}, p, { kind: p.kind === 'actor' ? 'participant' : 'actor' });
-        });
-        this._updateSequenceModel({ participants: participants });
+        this._applySequenceEdit(sequenceModelEditing.toggleParticipantKind(this.model, data));
       },
 
       moveSequenceParticipant: function (data) {
         if (this.isFlowchart) return;
-        var participants = (this.model.participants || []).slice();
-        var idx = -1;
-        for (var i = 0; i < participants.length; i++) {
-          if (participants[i].id === data.participantId) { idx = i; break; }
-        }
-        if (idx === -1) return;
-        var swapIdx = data.direction === 'left' ? idx - 1 : idx + 1;
-        if (swapIdx < 0 || swapIdx >= participants.length) return;
-        this._snapshot();
-        var tmp = participants[idx];
-        participants[idx] = participants[swapIdx];
-        participants[swapIdx] = tmp;
-        this._updateSequenceModel({ participants: participants });
+        this._applySequenceEdit(sequenceModelEditing.moveParticipant(this.model, data));
       },
 
       addSequenceMessage: function (payload) {
         if (this.isFlowchart) return;
-        var participants = this.model.participants || [];
-        if (!participants.length) return;
-
-        this._snapshot();
-        var fromId = participants[0].id;
-        var toId = participants[Math.min(1, participants.length - 1)].id;
-        var messageText = 'Message';
-
-        if (payload && payload.fromId) fromId = payload.fromId;
-        if (payload && payload.toId) toId = payload.toId;
-        if (payload && payload.text) messageText = payload.text;
-
-        if (payload && payload.participantId && !payload.fromId) {
-          fromId = payload.participantId;
-          for (var i = 0; i < participants.length; i++) {
-            if (participants[i].id === payload.participantId) {
-              toId = participants[(i + 1) % participants.length].id;
-              break;
-            }
-          }
-        }
-
-        var messages = (this.model.messages || []).slice();
-        var insertAt = messages.length;
-        if (payload && payload.insertIndex !== null && payload.insertIndex !== undefined) {
-          insertAt = Math.max(0, Math.min(messages.length, payload.insertIndex));
-        } else if (payload && payload.afterIndex !== null && payload.afterIndex !== undefined) {
-          insertAt = Math.min(messages.length, payload.afterIndex + 1);
-        }
-
-        var newMessage = {
-          from: fromId,
-          to: toId,
-          operator: '->>',
-          text: messageText
-        };
-        messages.splice(insertAt, 0, newMessage);
-
-        this._updateSequenceModel({
-          messages: messages,
-          statements: SequenceStatementUtils.insertMessageStatement(this.model, insertAt, newMessage)
-        });
+        this._applySequenceEdit(sequenceModelEditing.addMessage(this.model, payload));
       },
 
       updateSequenceParticipantText: function (data) {
         if (this.isFlowchart) return;
-        this._snapshot();
-        var participants = (this.model.participants || []).map(function (p) {
-          return p.id === data.participantId ? Object.assign({}, p, { label: data.text }) : p;
-        });
-        this._updateSequenceModel({ participants: participants });
+        this._applySequenceEdit(sequenceModelEditing.updateParticipantText(this.model, data));
       },
 
       updateSequenceMessageText: function (data) {
         if (this.isFlowchart) return;
-        this._snapshot();
-        var messages = (this.model.messages || []).map(function (m, idx) {
-          return idx === data.index ? Object.assign({}, m, { text: data.text }) : m;
-        });
-        this._updateSequenceModel({ messages: messages });
+        this._applySequenceEdit(sequenceModelEditing.updateMessageText(this.model, data));
       },
 
       reverseSequenceMessage: function (index) {
         if (this.isFlowchart) return;
-        this._snapshot();
-        var messages = (this.model.messages || []).map(function (m, idx) {
-          if (idx !== index) return m;
-          return Object.assign({}, m, { from: m.to, to: m.from });
-        });
-        this._updateSequenceModel({ messages: messages });
+        this._applySequenceEdit(sequenceModelEditing.reverseMessage(this.model, index));
       },
 
       toggleAutonumber: function () {
         if (this.isFlowchart) return;
-        this._snapshot();
-        this._updateSequenceModel({ autonumber: !this.model.autonumber });
+        this._applySequenceEdit(sequenceModelEditing.toggleAutonumber(this.model));
       },
 
       toggleSequenceMessageLineType: function (index) {
         if (this.isFlowchart) return;
-        this._snapshot();
-        var messages = (this.model.messages || []).map(function (m, idx) {
-          if (idx !== index) return m;
-          return Object.assign({}, m, {
-            operator: SequenceSvgHandler.toggleMessageLineType(m)
-          });
-        });
-        this._updateSequenceModel({ messages: messages });
+        this._applySequenceEdit(sequenceModelEditing.toggleMessageLineType(this.model, index));
       },
 
       setSequenceMessageLineType: function (data) {
         if (this.isFlowchart) return;
-        this._snapshot();
-        var messages = (this.model.messages || []).map(function (m, idx) {
-          if (idx !== data.index) return m;
-          var suffix = /[+-]$/.test(m.operator || '') ? m.operator.slice(-1) : '';
-          return Object.assign({}, m, { operator: data.operator + suffix });
-        });
-        this._updateSequenceModel({ messages: messages });
+        this._applySequenceEdit(sequenceModelEditing.setMessageLineType(this.model, data));
       },
 
       addSequenceBranch: function (data) {
         if (this.isFlowchart || !data || !data.keyword || !data.messageIndices || !data.messageIndices.length) return;
-        this._snapshot();
-        this._updateSequenceModel({
-          statements: SequenceStatementUtils.insertBranchStatement(
-            this.model,
-            data.messageIndices,
-            data.keyword,
-            data.text || ''
-          )
-        });
+        this._applySequenceEdit(sequenceModelEditing.addBranch(this.model, data));
       },
 
       wrapSequenceMessagesInBlock: function (data) {
         if (this.isFlowchart || !data || !data.kind) return;
-        var messageIndices = data.messageIndices || [];
-        if (!messageIndices.length) return;
-        this._snapshot();
-        this._updateSequenceModel({
-          statements: SequenceStatementUtils.wrapMessagesInBlock(
-            this.model,
-            messageIndices,
-            data.kind,
-            data.text || ''
-          )
-        });
+        this._applySequenceEdit(sequenceModelEditing.wrapMessagesInBlock(this.model, data));
       },
 
       updateSequenceBlockText: function (data) {
         if (this.isFlowchart || !data || !data.blockId) return;
-        var nextText = String(data.text || '').trim();
-        this._snapshot();
-        this._updateSequenceModel({
-          statements: nextText
-            ? SequenceStatementUtils.updateBlockText(this.model, data.blockId, nextText)
-            : SequenceStatementUtils.deleteBlock(this.model, data.blockId)
-        });
+        this._applySequenceEdit(sequenceModelEditing.updateBlockText(this.model, data));
       },
 
       updateSequenceBranchText: function (data) {
         if (this.isFlowchart || !data || data.statementIndex === null || data.statementIndex === undefined) return;
-        this._snapshot();
-        this._updateSequenceModel({
-          statements: String(data.text || '').trim()
-            ? SequenceStatementUtils.updateBranchText(this.model, data.statementIndex, data.text || '')
-            : SequenceStatementUtils.deleteBranchStatement(this.model, data.statementIndex)
-        });
+        this._applySequenceEdit(sequenceModelEditing.updateBranchText(this.model, data));
       },
 
       changeSequenceBlockType: function (data) {
         if (this.isFlowchart || !data || !data.blockId || !data.kind) return;
-        this._snapshot();
-        this._updateSequenceModel({
-          statements: SequenceStatementUtils.changeBlockKind(this.model, data.blockId, data.kind)
-        });
+        this._applySequenceEdit(sequenceModelEditing.changeBlockType(this.model, data));
       },
 
       addSequenceNote: function (data) {
         if (this.isFlowchart || !data || !data.participantId) return;
-        this._snapshot();
-        this._updateSequenceModel({
-          statements: SequenceStatementUtils.addNoteStatement(
-            this.model,
-            data.participantId,
-            data.insertIndex !== undefined ? data.insertIndex : null,
-            'Note'
-          )
-        });
+        this._applySequenceEdit(sequenceModelEditing.addNote(this.model, data));
       },
 
       updateSequenceNoteText: function (data) {
         if (this.isFlowchart || !data || data.statementIndex === null || data.statementIndex === undefined) return;
-        var nextText = String(data.text || '').trim();
-        this._snapshot();
-        this._updateSequenceModel({
-          statements: nextText
-            ? SequenceStatementUtils.updateNoteText(this.model, data.statementIndex, nextText)
-            : SequenceStatementUtils.deleteNoteStatement(this.model, data.statementIndex)
-        });
+        this._applySequenceEdit(sequenceModelEditing.updateNoteText(this.model, data));
       },
 
-      // deleteSelected dispatcher가 sequence 분기일 때 호출.
+      // deleteSelected dispatcher가 sequence 분기를 여기로 위임.
       _deleteSequenceSelection: function (data) {
-        if (data.sequenceParticipantId) {
-          var removedIndices = [];
-          var originalMessages = this.model.messages || [];
-          var participants = (this.model.participants || []).filter(function (p) {
-            return p.id !== data.sequenceParticipantId;
-          });
-          var messages = originalMessages.filter(function (m, idx) {
-            var keep = m.from !== data.sequenceParticipantId && m.to !== data.sequenceParticipantId;
-            if (!keep) removedIndices.push(idx);
-            return keep;
-          });
-          this._updateSequenceModel({
-            participants: participants,
-            messages: messages,
-            statements: SequenceStatementUtils.removeParticipantStatements(
-              this.model,
-              data.sequenceParticipantId,
-              removedIndices
-            )
-          });
-          return true;
-        }
-        if (data.sequenceBlockId) {
-          this._updateSequenceModel({
-            statements: SequenceStatementUtils.deleteBlock(this.model, data.sequenceBlockId)
-          });
-          return true;
-        }
-        if (data.sequenceNoteStatementIndex !== null && data.sequenceNoteStatementIndex !== undefined) {
-          this._updateSequenceModel({
-            statements: SequenceStatementUtils.deleteNoteStatement(this.model, data.sequenceNoteStatementIndex)
-          });
-          return true;
-        }
-        if (data.sequenceMessageIndex !== null && data.sequenceMessageIndex !== undefined) {
-          var mc = (this.model.messages || []).slice();
-          mc.splice(data.sequenceMessageIndex, 1);
-          this._updateSequenceModel({
-            messages: mc,
-            statements: SequenceStatementUtils.removeMessageStatements(this.model, [data.sequenceMessageIndex])
-          });
-          return true;
-        }
-        return false;
+        var nextModel = sequenceModelEditing.deleteSelection(this.model, data);
+        if (!nextModel || nextModel === this.model) return false;
+        this.model = nextModel;
+        this.updateScriptFromModel();
+        return true;
       }
     }
   };
@@ -7432,15 +7712,6 @@ Vue.component('mermaid-full-editor', {
       if (this.$refs.preview) this.$refs.preview.scheduleFit();
     },
 
-    _updateSequenceModel: function (patch) {
-      var nextModel = Object.assign({}, this.model, patch);
-      nextModel.explicitParticipants = true;
-      if (nextModel.messages) {
-        nextModel.messages = SequenceMessageCodec.normalizeActivations(nextModel.messages);
-      }
-      this.model = nextModel;
-      this.updateScriptFromModel();
-    },
 
     _snapshot: function () { if (this.history) this.history.snapshot(this.model); },
 

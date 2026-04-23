@@ -1,7 +1,7 @@
 /**
  * Sequence 메시지 operator 관련 규칙을 한 곳에서 관리하는 공용 헬퍼
- * - sequence-parser.js  : MESSAGE_RE 사용
- * - sequence-generator.js : DEFAULT_OPERATOR 사용
+ * - representation/sequence-parser.js  : MESSAGE_RE 사용
+ * - representation/sequence-generator.js : DEFAULT_OPERATOR 사용
  * - SequenceSvgHandler.js : parseOperator / toggleLineStyle 사용
  * - MermaidPreview.js     : LINE_TYPE_OPTIONS 사용
  */

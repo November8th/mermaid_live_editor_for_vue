@@ -1,12 +1,13 @@
 /**
  * sequenceActionsMixin
- * LiveEditor와 FullEditor가 공유하는 sequence diagram 액션 믹스인.
+ * Container component가 sequenceModelEditing을 사용할 수 있도록 감싼 얇은 wrapper.
  * flowchartActionsMixin과 세트로 사용한다.
  *
  * 호출부 요구사항:
  *   - data: model (type, participants, messages, autonumber)
  *   - data: participantIdAllocator (IdAllocator 인스턴스)
- *   - methods: _snapshot, _updateSequenceModel
+ *   - data: script
+ *   - methods: _snapshot, updateScriptFromModel
  *   - computed: isFlowchart
  *
  * deleteSelected dispatcher는 컴포넌트에 남고, sequence 삭제 분기만 여기서 처리.
@@ -16,281 +17,119 @@
 
   global.sequenceActionsMixin = {
     methods: {
+      _applySequenceEdit: function (nextModel) {
+        if (!nextModel || nextModel === this.model) return false;
+        this._snapshot();
+        this.model = nextModel;
+        this.updateScriptFromModel();
+        return true;
+      },
+
       addSequenceParticipant: function () {
         if (this.isFlowchart) return;
-        this._snapshot();
-        var id = this.participantIdAllocator.next(this.script, this.model.participants);
-        var participants = (this.model.participants || []).slice();
-        participants.push({ id: id, label: 'Participant ' + this.participantIdAllocator.counter, kind: 'participant' });
-        this._updateSequenceModel({ participants: participants });
+        this._applySequenceEdit(sequenceModelEditing.addParticipant(this.model, {
+          id: this.participantIdAllocator.next(this.script, this.model.participants),
+          label: 'Participant ' + this.participantIdAllocator.counter,
+          kind: 'participant'
+        }));
       },
 
       addSequenceActor: function () {
         if (this.isFlowchart) return;
-        this._snapshot();
-        var id = this.participantIdAllocator.next(this.script, this.model.participants);
-        var participants = (this.model.participants || []).slice();
-        participants.push({ id: id, label: 'Actor ' + this.participantIdAllocator.counter, kind: 'actor' });
-        this._updateSequenceModel({ participants: participants });
+        this._applySequenceEdit(sequenceModelEditing.addParticipant(this.model, {
+          id: this.participantIdAllocator.next(this.script, this.model.participants),
+          label: 'Actor ' + this.participantIdAllocator.counter,
+          kind: 'actor'
+        }));
       },
 
       toggleParticipantKind: function (data) {
         if (this.isFlowchart) return;
-        this._snapshot();
-        var participants = (this.model.participants || []).map(function (p) {
-          if (p.id !== data.participantId) return p;
-          return Object.assign({}, p, { kind: p.kind === 'actor' ? 'participant' : 'actor' });
-        });
-        this._updateSequenceModel({ participants: participants });
+        this._applySequenceEdit(sequenceModelEditing.toggleParticipantKind(this.model, data));
       },
 
       moveSequenceParticipant: function (data) {
         if (this.isFlowchart) return;
-        var participants = (this.model.participants || []).slice();
-        var idx = -1;
-        for (var i = 0; i < participants.length; i++) {
-          if (participants[i].id === data.participantId) { idx = i; break; }
-        }
-        if (idx === -1) return;
-        var swapIdx = data.direction === 'left' ? idx - 1 : idx + 1;
-        if (swapIdx < 0 || swapIdx >= participants.length) return;
-        this._snapshot();
-        var tmp = participants[idx];
-        participants[idx] = participants[swapIdx];
-        participants[swapIdx] = tmp;
-        this._updateSequenceModel({ participants: participants });
+        this._applySequenceEdit(sequenceModelEditing.moveParticipant(this.model, data));
       },
 
       addSequenceMessage: function (payload) {
         if (this.isFlowchart) return;
-        var participants = this.model.participants || [];
-        if (!participants.length) return;
-
-        this._snapshot();
-        var fromId = participants[0].id;
-        var toId = participants[Math.min(1, participants.length - 1)].id;
-        var messageText = 'Message';
-
-        if (payload && payload.fromId) fromId = payload.fromId;
-        if (payload && payload.toId) toId = payload.toId;
-        if (payload && payload.text) messageText = payload.text;
-
-        if (payload && payload.participantId && !payload.fromId) {
-          fromId = payload.participantId;
-          for (var i = 0; i < participants.length; i++) {
-            if (participants[i].id === payload.participantId) {
-              toId = participants[(i + 1) % participants.length].id;
-              break;
-            }
-          }
-        }
-
-        var messages = (this.model.messages || []).slice();
-        var insertAt = messages.length;
-        if (payload && payload.insertIndex !== null && payload.insertIndex !== undefined) {
-          insertAt = Math.max(0, Math.min(messages.length, payload.insertIndex));
-        } else if (payload && payload.afterIndex !== null && payload.afterIndex !== undefined) {
-          insertAt = Math.min(messages.length, payload.afterIndex + 1);
-        }
-
-        var newMessage = {
-          from: fromId,
-          to: toId,
-          operator: '->>',
-          text: messageText
-        };
-        messages.splice(insertAt, 0, newMessage);
-
-        this._updateSequenceModel({
-          messages: messages,
-          statements: SequenceStatementUtils.insertMessageStatement(this.model, insertAt, newMessage)
-        });
+        this._applySequenceEdit(sequenceModelEditing.addMessage(this.model, payload));
       },
 
       updateSequenceParticipantText: function (data) {
         if (this.isFlowchart) return;
-        this._snapshot();
-        var participants = (this.model.participants || []).map(function (p) {
-          return p.id === data.participantId ? Object.assign({}, p, { label: data.text }) : p;
-        });
-        this._updateSequenceModel({ participants: participants });
+        this._applySequenceEdit(sequenceModelEditing.updateParticipantText(this.model, data));
       },
 
       updateSequenceMessageText: function (data) {
         if (this.isFlowchart) return;
-        this._snapshot();
-        var messages = (this.model.messages || []).map(function (m, idx) {
-          return idx === data.index ? Object.assign({}, m, { text: data.text }) : m;
-        });
-        this._updateSequenceModel({ messages: messages });
+        this._applySequenceEdit(sequenceModelEditing.updateMessageText(this.model, data));
       },
 
       reverseSequenceMessage: function (index) {
         if (this.isFlowchart) return;
-        this._snapshot();
-        var messages = (this.model.messages || []).map(function (m, idx) {
-          if (idx !== index) return m;
-          return Object.assign({}, m, { from: m.to, to: m.from });
-        });
-        this._updateSequenceModel({ messages: messages });
+        this._applySequenceEdit(sequenceModelEditing.reverseMessage(this.model, index));
       },
 
       toggleAutonumber: function () {
         if (this.isFlowchart) return;
-        this._snapshot();
-        this._updateSequenceModel({ autonumber: !this.model.autonumber });
+        this._applySequenceEdit(sequenceModelEditing.toggleAutonumber(this.model));
       },
 
       toggleSequenceMessageLineType: function (index) {
         if (this.isFlowchart) return;
-        this._snapshot();
-        var messages = (this.model.messages || []).map(function (m, idx) {
-          if (idx !== index) return m;
-          return Object.assign({}, m, {
-            operator: SequenceSvgHandler.toggleMessageLineType(m)
-          });
-        });
-        this._updateSequenceModel({ messages: messages });
+        this._applySequenceEdit(sequenceModelEditing.toggleMessageLineType(this.model, index));
       },
 
       setSequenceMessageLineType: function (data) {
         if (this.isFlowchart) return;
-        this._snapshot();
-        var messages = (this.model.messages || []).map(function (m, idx) {
-          if (idx !== data.index) return m;
-          var suffix = /[+-]$/.test(m.operator || '') ? m.operator.slice(-1) : '';
-          return Object.assign({}, m, { operator: data.operator + suffix });
-        });
-        this._updateSequenceModel({ messages: messages });
+        this._applySequenceEdit(sequenceModelEditing.setMessageLineType(this.model, data));
       },
 
       addSequenceBranch: function (data) {
         if (this.isFlowchart || !data || !data.keyword || !data.messageIndices || !data.messageIndices.length) return;
-        this._snapshot();
-        this._updateSequenceModel({
-          statements: SequenceStatementUtils.insertBranchStatement(
-            this.model,
-            data.messageIndices,
-            data.keyword,
-            data.text || ''
-          )
-        });
+        this._applySequenceEdit(sequenceModelEditing.addBranch(this.model, data));
       },
 
       wrapSequenceMessagesInBlock: function (data) {
         if (this.isFlowchart || !data || !data.kind) return;
-        var messageIndices = data.messageIndices || [];
-        if (!messageIndices.length) return;
-        this._snapshot();
-        this._updateSequenceModel({
-          statements: SequenceStatementUtils.wrapMessagesInBlock(
-            this.model,
-            messageIndices,
-            data.kind,
-            data.text || ''
-          )
-        });
+        this._applySequenceEdit(sequenceModelEditing.wrapMessagesInBlock(this.model, data));
       },
 
       updateSequenceBlockText: function (data) {
         if (this.isFlowchart || !data || !data.blockId) return;
-        var nextText = String(data.text || '').trim();
-        this._snapshot();
-        this._updateSequenceModel({
-          statements: nextText
-            ? SequenceStatementUtils.updateBlockText(this.model, data.blockId, nextText)
-            : SequenceStatementUtils.deleteBlock(this.model, data.blockId)
-        });
+        this._applySequenceEdit(sequenceModelEditing.updateBlockText(this.model, data));
       },
 
       updateSequenceBranchText: function (data) {
         if (this.isFlowchart || !data || data.statementIndex === null || data.statementIndex === undefined) return;
-        this._snapshot();
-        this._updateSequenceModel({
-          statements: String(data.text || '').trim()
-            ? SequenceStatementUtils.updateBranchText(this.model, data.statementIndex, data.text || '')
-            : SequenceStatementUtils.deleteBranchStatement(this.model, data.statementIndex)
-        });
+        this._applySequenceEdit(sequenceModelEditing.updateBranchText(this.model, data));
       },
 
       changeSequenceBlockType: function (data) {
         if (this.isFlowchart || !data || !data.blockId || !data.kind) return;
-        this._snapshot();
-        this._updateSequenceModel({
-          statements: SequenceStatementUtils.changeBlockKind(this.model, data.blockId, data.kind)
-        });
+        this._applySequenceEdit(sequenceModelEditing.changeBlockType(this.model, data));
       },
 
       addSequenceNote: function (data) {
         if (this.isFlowchart || !data || !data.participantId) return;
-        this._snapshot();
-        this._updateSequenceModel({
-          statements: SequenceStatementUtils.addNoteStatement(
-            this.model,
-            data.participantId,
-            data.insertIndex !== undefined ? data.insertIndex : null,
-            'Note'
-          )
-        });
+        this._applySequenceEdit(sequenceModelEditing.addNote(this.model, data));
       },
 
       updateSequenceNoteText: function (data) {
         if (this.isFlowchart || !data || data.statementIndex === null || data.statementIndex === undefined) return;
-        var nextText = String(data.text || '').trim();
-        this._snapshot();
-        this._updateSequenceModel({
-          statements: nextText
-            ? SequenceStatementUtils.updateNoteText(this.model, data.statementIndex, nextText)
-            : SequenceStatementUtils.deleteNoteStatement(this.model, data.statementIndex)
-        });
+        this._applySequenceEdit(sequenceModelEditing.updateNoteText(this.model, data));
       },
 
-      // deleteSelected dispatcher가 sequence 분기일 때 호출.
+      // deleteSelected dispatcher가 sequence 분기를 여기로 위임.
       _deleteSequenceSelection: function (data) {
-        if (data.sequenceParticipantId) {
-          var removedIndices = [];
-          var originalMessages = this.model.messages || [];
-          var participants = (this.model.participants || []).filter(function (p) {
-            return p.id !== data.sequenceParticipantId;
-          });
-          var messages = originalMessages.filter(function (m, idx) {
-            var keep = m.from !== data.sequenceParticipantId && m.to !== data.sequenceParticipantId;
-            if (!keep) removedIndices.push(idx);
-            return keep;
-          });
-          this._updateSequenceModel({
-            participants: participants,
-            messages: messages,
-            statements: SequenceStatementUtils.removeParticipantStatements(
-              this.model,
-              data.sequenceParticipantId,
-              removedIndices
-            )
-          });
-          return true;
-        }
-        if (data.sequenceBlockId) {
-          this._updateSequenceModel({
-            statements: SequenceStatementUtils.deleteBlock(this.model, data.sequenceBlockId)
-          });
-          return true;
-        }
-        if (data.sequenceNoteStatementIndex !== null && data.sequenceNoteStatementIndex !== undefined) {
-          this._updateSequenceModel({
-            statements: SequenceStatementUtils.deleteNoteStatement(this.model, data.sequenceNoteStatementIndex)
-          });
-          return true;
-        }
-        if (data.sequenceMessageIndex !== null && data.sequenceMessageIndex !== undefined) {
-          var mc = (this.model.messages || []).slice();
-          mc.splice(data.sequenceMessageIndex, 1);
-          this._updateSequenceModel({
-            messages: mc,
-            statements: SequenceStatementUtils.removeMessageStatements(this.model, [data.sequenceMessageIndex])
-          });
-          return true;
-        }
-        return false;
+        var nextModel = sequenceModelEditing.deleteSelection(this.model, data);
+        if (!nextModel || nextModel === this.model) return false;
+        this.model = nextModel;
+        this.updateScriptFromModel();
+        return true;
       }
     }
   };
