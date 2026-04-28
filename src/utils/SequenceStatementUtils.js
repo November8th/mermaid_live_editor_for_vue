@@ -302,11 +302,32 @@
     return best;
   }
 
+  function findBranchInsertPoint(statements, altBlock, targetStmtIndex) {
+    if (targetStmtIndex === -1 || altBlock.endIndex === -1) return targetStmtIndex;
+    var targetDepth = altBlock.depth + 1;
+    var depth = altBlock.depth;
+    var directChildStart = -1;
+    for (var i = altBlock.statementIndex; i <= altBlock.endIndex; i++) {
+      var stmt = statements[i];
+      if (!stmt) continue;
+      if (i === altBlock.statementIndex) { depth = targetDepth; continue; }
+      if (depth === targetDepth) directChildStart = i;
+      if (/^(loop|alt|opt|par)$/.test(stmt.type)) { depth++; }
+      else if (stmt.type === 'end') { depth--; }
+      if (i === targetStmtIndex) return directChildStart !== -1 ? directChildStart : targetStmtIndex;
+    }
+    return targetStmtIndex;
+  }
+
   function insertBranchStatement(model, messageIndices, keyword, text) {
     var sorted = messageIndices.slice().sort(function (a, b) { return a - b; });
     var statements = cloneStatements(model);
-    var insertAt = messageIndexToStatementIndex(statements, sorted[0]);
-    if (insertAt === -1) return statements;
+    var firstMsgStmtIndex = messageIndexToStatementIndex(statements, sorted[0]);
+    if (firstMsgStmtIndex === -1) return statements;
+    var enclosing = findEnclosingBranchBlock(model, sorted);
+    var insertAt = enclosing
+      ? findBranchInsertPoint(statements, enclosing, firstMsgStmtIndex)
+      : firstMsgStmtIndex;
     statements.splice(insertAt, 0, { type: String(keyword), text: text || '' });
     return statements;
   }
