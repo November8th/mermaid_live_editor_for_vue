@@ -18,7 +18,8 @@ Vue.component('mermaid-toolbar', {
     direction: { type: String, default: 'TD' },
     canUndo: { type: Boolean, default: false },
     canRedo: { type: Boolean, default: false },
-    autonumber: { type: Boolean, default: false }
+    autonumber: { type: Boolean, default: false },
+    fullScreen: { type: Boolean, default: false }
   },
   data: function () {
     return {
@@ -64,6 +65,7 @@ Vue.component('mermaid-toolbar', {
     zoomOut: function () { this.$emit('zoom-out'); },
     zoomIn: function () { this.$emit('zoom-in'); },
     fitView: function () { this.$emit('fit-view'); },
+    toggleFullscreen: function () { this.$emit('toggle-fullscreen'); },
     copySvg: function () { this.$emit('copy-svg'); },
     exportAs: function (format) {
       this.showExportMenu = false;
@@ -167,16 +169,32 @@ Vue.component('mermaid-toolbar', {
               <line x1="7" y1="10" x2="13" y2="10"></line>\
             </svg>\
           </button>\
-          <button class="toolbar__icon-btn toolbar__icon-btn--floating" @click="fitView" title="Fit to View" aria-label="Fit to View">\
-            <svg class="toolbar__icon-svg" viewBox="0 0 24 24" aria-hidden="true">\
-              <polyline points="8,5 5,5 5,8"></polyline>\
-              <line x1="5" y1="5" x2="9" y2="9"></line>\
-              <polyline points="16,5 19,5 19,8"></polyline>\
-              <line x1="19" y1="5" x2="15" y2="9"></line>\
-              <polyline points="5,16 5,19 8,19"></polyline>\
-              <line x1="5" y1="19" x2="9" y2="15"></line>\
-              <polyline points="16,19 19,19 19,16"></polyline>\
-              <line x1="19" y1="19" x2="15" y2="15"></line>\
+          <button class="toolbar__icon-btn toolbar__icon-btn--floating toolbar__icon-btn--fitview" @click="fitView" title="Fit to View" aria-label="Fit to View">\
+            <svg class="toolbar__icon-img toolbar__icon-img--fitview" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">\
+              <mask id="icon-zoom-to-fit-mask" style="mask-type:alpha" maskUnits="userSpaceOnUse" x="6" y="6" width="20" height="20">\
+                <rect x="6" y="6" width="20" height="20" fill="#D9D9D9"/>\
+              </mask>\
+              <g mask="url(#icon-zoom-to-fit-mask)">\
+                <path d="M10.0625 23L9 21.9375L11.4375 19.5H10V18H14V22H12.5V20.5625L10.0625 23ZM21.9375 23L19.5 20.5625V22H18V18H22V19.5H20.5625L23 21.9375L21.9375 23ZM10 14V12.5H11.4375L9 10.0625L10.0625 9L12.5 11.4375V10H14V14H10ZM18 14V10H19.5V11.4375L21.9375 9L23 10.0625L20.5625 12.5H22V14H18Z" fill="#767676"/>\
+              </g>\
+            </svg>\
+          </button>\
+          <button class="toolbar__icon-btn toolbar__icon-btn--floating" @click="toggleFullscreen" :title="fullScreen ? \'Exit Fullscreen\' : \'Fullscreen\'" :aria-label="fullScreen ? \'Exit Fullscreen\' : \'Fullscreen\'">\
+            <svg v-if="!fullScreen" class="toolbar__icon-img" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">\
+              <mask id="icon-fullscreen-mask" style="mask-type:alpha" maskUnits="userSpaceOnUse" x="0" y="0" width="24" height="24">\
+                <path fill="#D9D9D9" d="M0 0h24v24H0z"/>\
+              </mask>\
+              <g mask="url(#icon-fullscreen-mask)">\
+                <path d="M14 17h5v-5h-2v3h-3v2zm-9-5h2V9h3V7H5v5zm-1 8c-.55 0-1.02-.196-1.413-.587A1.926 1.926 0 0 1 2 18V6c0-.55.196-1.02.587-1.412A1.926 1.926 0 0 1 4 4h16c.55 0 1.02.196 1.413.588.391.391.587.862.587 1.412v12c0 .55-.196 1.02-.587 1.413A1.926 1.926 0 0 1 20 20H4zm0-2h16V6H4v12z" fill="#969696"/>\
+              </g>\
+            </svg>\
+            <svg v-else class="toolbar__icon-img" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">\
+              <mask id="icon-fullscreen-active-mask" style="mask-type:alpha" maskUnits="userSpaceOnUse" x="0" y="0" width="24" height="24">\
+                <path fill="#0081ea" d="M0 0h24v24H0z"/>\
+              </mask>\
+              <g mask="url(#icon-fullscreen-active-mask)">\
+                <path d="M14 17h5v-5h-2v3h-3v2zm-9-5h2V9h3V7H5v5zm-1 8c-.55 0-1.02-.196-1.413-.587A1.926 1.926 0 0 1 2 18V6c0-.55.196-1.02.587-1.412A1.926 1.926 0 0 1 4 4h16c.55 0 1.02.196 1.413.588.391.391.587.862.587 1.412v12c0 .55-.196 1.02-.587 1.413A1.926 1.926 0 0 1 20 20H4zm0-2h16V6H4v12z" fill="#0081ea"/>\
+              </g>\
             </svg>\
           </button>\
           <div class="toolbar__export-wrap">\

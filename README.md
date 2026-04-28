@@ -19,7 +19,8 @@ gui-editor/
 │  ├─ actions/         # SVG 상호작용 처리 로직
 │  ├─ representation/  # Mermaid script <-> model 변환
 │  ├─ model-editing/   # 순수 model 수정 로직
-│  └─ utils/           # codec, export, history, diagnostics, ctx builder
+│  ├─ utils/           # codec, export, history, diagnostics, ctx builder
+│  └─ assets/          # 정적 SVG 아이콘 (zoom-to-fit, fullscreen 등)
 ├─ dist/               # 배포용 번들 결과물
 ├─ docs/               # 설계/임베드/기능 문서
 ├─ build.js            # 번들 빌드 스크립트
@@ -247,6 +248,19 @@ Mermaid 문자열과 내부 model 사이의 변환을 담당합니다.
   - preview interaction handler가 쓰는 ctx 객체 조립을 담당합니다.
 
 즉 `src/utils`는 예전의 단순 service 레이어라기보다, 컴포넌트 밖으로 뺀 공통 정책과 보조 로직을 담는 계층입니다.
+
+### `src/assets`
+
+JS 번들에 포함되지 않는 정적 SVG 아이콘 파일을 모아두는 위치입니다.
+
+- `icon-dv-zoom-to-fit.svg`
+  - zoom-to-fit 버튼용 아이콘 (32×32)입니다.
+- `trace-fullscreen.svg`
+  - 전체화면 진입 버튼 아이콘 (24×24, 기본 상태)입니다.
+- `trace-fullscreen-active.svg`
+  - 전체화면 진입 버튼 아이콘 (24×24, 활성 상태 — 파란색 강조)입니다.
+
+이 파일들은 빌드 번들에 포함되지 않으며, `<img src>` 또는 인라인 SVG로 직접 참조합니다.
 
 ## Architecture
 

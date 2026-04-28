@@ -31,7 +31,8 @@ Vue.component('mermaid-full-editor', {
       nodeIdAllocator: null,
       participantIdAllocator: null,
 
-      history: null
+      history: null,
+      fullScreen: false
       // 토스트 상태는 toastMixin에서 제공
     };
   },
@@ -53,6 +54,10 @@ Vue.component('mermaid-full-editor', {
     // 컴포넌트 → 부모 동기화
     script: function (newVal) {
       this.$emit('input', newVal);
+    },
+    fullScreen: function () {
+      var self = this;
+      this.$nextTick(function () { self.fitView(); });
     }
   },
 
@@ -146,8 +151,8 @@ Vue.component('mermaid-full-editor', {
   },
 
   template: '\
-    <div class="gui-editor-shell">\
-      <div class="gui-editor-shell__editor-pane">\
+    <div class="gui-editor-shell" :class="{ \'gui-editor-shell--fullscreen\': fullScreen }">\
+      <div v-if="!fullScreen" class="gui-editor-shell__editor-pane">\
         <mermaid-editor\
           :value="script"\
           :error="error"\
@@ -164,6 +169,8 @@ Vue.component('mermaid-full-editor', {
           :can-undo="canUndo"\
           :can-redo="canRedo"\
           :autonumber="!!model.autonumber"\
+          :full-screen="fullScreen"\
+          @toggle-fullscreen="fullScreen = !fullScreen"\
           @add-node="addNode"\
           @add-sequence-participant="addSequenceParticipant"\
           @add-sequence-actor="addSequenceActor"\

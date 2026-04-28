@@ -116,3 +116,14 @@ for (const assetFile of assetFiles) {
   fs.copyFileSync(assetSrc, assetOut);
   console.log(`Asset copied: ${assetOut}`);
 }
+
+// src/assets/ → dist/assets/
+const srcAssetsDir = path.join(__dirname, 'src', 'assets');
+const distAssetsDir = path.join(__dirname, 'dist', 'assets');
+if (fs.existsSync(srcAssetsDir)) {
+  fs.mkdirSync(distAssetsDir, { recursive: true });
+  for (const file of fs.readdirSync(srcAssetsDir)) {
+    fs.copyFileSync(path.join(srcAssetsDir, file), path.join(distAssetsDir, file));
+    console.log(`Asset copied: dist/assets/${file}`);
+  }
+}
