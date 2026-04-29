@@ -342,28 +342,54 @@
         }
       }
 
-      // 메인 title(loopText) 클릭 → 블록 텍스트 inline edit
+      // 메인 title(loopText) 클릭 → 컨텍스트 툴바 (Edit / Delete)
       if (titleEl) {
-        titleEl.style.cursor = 'text';
+        titleEl.style.cursor = 'pointer';
         titleEl.style.pointerEvents = 'all';
         titleEl.addEventListener('click', function (e) {
           e.stopPropagation();
-          if (ctx.openSequenceBlockEdit) {
-            ctx.openSequenceBlockEdit(block.id, block.text || '', e.clientX, e.clientY);
+          if (ctx.setState) {
+            ctx.setState({
+              selectedSequenceParticipantId: null,
+              selectedSequenceMessageIndex: null,
+              selectedSequenceMessageIndices: [],
+              selectedSequenceBlockId: block.id,
+              sequenceToolbar: {
+                type: 'block-title',
+                blockId: block.id,
+                kind: block.kind,
+                text: block.text || '',
+                x: e.clientX,
+                y: e.clientY
+              }
+            });
           }
         });
       }
 
-      // 분기 title(loopText) 클릭 → 분기 텍스트 inline edit
+      // 분기 title(loopText) 클릭 → 컨텍스트 툴바 (Edit / Delete)
       for (var b = 0; b < branchTitleEls.length; b++) {
         (function (branchEl, statementIndex, branchStmt) {
           if (!branchEl) return;
-          branchEl.style.cursor = 'text';
+          branchEl.style.cursor = 'pointer';
           branchEl.style.pointerEvents = 'all';
           branchEl.addEventListener('click', function (e) {
             e.stopPropagation();
-            if (ctx.openSequenceBranchEdit) {
-              ctx.openSequenceBranchEdit(statementIndex, branchStmt.text || '', e.clientX, e.clientY);
+            if (ctx.setState) {
+              ctx.setState({
+                selectedSequenceParticipantId: null,
+                selectedSequenceMessageIndex: null,
+                selectedSequenceMessageIndices: [],
+                selectedSequenceBlockId: block.id,
+                sequenceToolbar: {
+                  type: 'branch-title',
+                  blockId: block.id,
+                  statementIndex: statementIndex,
+                  text: branchStmt.text || '',
+                  x: e.clientX,
+                  y: e.clientY
+                }
+              });
             }
           });
         }(branchTitleEls[b], block.branchIndices[b], branchStatements[b] || {}));

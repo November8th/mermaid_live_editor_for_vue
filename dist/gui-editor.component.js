@@ -1,6 +1,6 @@
 /**
  * gui-editor.component.js
- * Built: 2026-04-29T04:27:39.181Z
+ * Built: 2026-04-29T05:19:26.895Z
  *
  * Concatenation of gui-editor source files (no minification).
  * Requires global Vue 2 and Mermaid loaded separately.
@@ -5372,28 +5372,54 @@
         }
       }
 
-      // 메인 title(loopText) 클릭 → 블록 텍스트 inline edit
+      // 메인 title(loopText) 클릭 → 컨텍스트 툴바 (Edit / Delete)
       if (titleEl) {
-        titleEl.style.cursor = 'text';
+        titleEl.style.cursor = 'pointer';
         titleEl.style.pointerEvents = 'all';
         titleEl.addEventListener('click', function (e) {
           e.stopPropagation();
-          if (ctx.openSequenceBlockEdit) {
-            ctx.openSequenceBlockEdit(block.id, block.text || '', e.clientX, e.clientY);
+          if (ctx.setState) {
+            ctx.setState({
+              selectedSequenceParticipantId: null,
+              selectedSequenceMessageIndex: null,
+              selectedSequenceMessageIndices: [],
+              selectedSequenceBlockId: block.id,
+              sequenceToolbar: {
+                type: 'block-title',
+                blockId: block.id,
+                kind: block.kind,
+                text: block.text || '',
+                x: e.clientX,
+                y: e.clientY
+              }
+            });
           }
         });
       }
 
-      // 분기 title(loopText) 클릭 → 분기 텍스트 inline edit
+      // 분기 title(loopText) 클릭 → 컨텍스트 툴바 (Edit / Delete)
       for (var b = 0; b < branchTitleEls.length; b++) {
         (function (branchEl, statementIndex, branchStmt) {
           if (!branchEl) return;
-          branchEl.style.cursor = 'text';
+          branchEl.style.cursor = 'pointer';
           branchEl.style.pointerEvents = 'all';
           branchEl.addEventListener('click', function (e) {
             e.stopPropagation();
-            if (ctx.openSequenceBranchEdit) {
-              ctx.openSequenceBranchEdit(statementIndex, branchStmt.text || '', e.clientX, e.clientY);
+            if (ctx.setState) {
+              ctx.setState({
+                selectedSequenceParticipantId: null,
+                selectedSequenceMessageIndex: null,
+                selectedSequenceMessageIndices: [],
+                selectedSequenceBlockId: block.id,
+                sequenceToolbar: {
+                  type: 'branch-title',
+                  blockId: block.id,
+                  statementIndex: statementIndex,
+                  text: branchStmt.text || '',
+                  x: e.clientX,
+                  y: e.clientY
+                }
+              });
             }
           });
         }(branchTitleEls[b], block.branchIndices[b], branchStatements[b] || {}));
@@ -6592,7 +6618,8 @@ Vue.component('mermaid-preview', {
       subgraphToolbar: null,      // { x, y } — "Wrap in Subgraph" 버튼 위치
       subgraphTitleInput: '',
 
-      // subgraph 타이틀 인라인 편집
+      // subgraph 타이틀 컨텍스트 툴바 & 인라인 편집
+      subgraphTitleToolbar: null,   // { sgId, x, y }
       editingSubgraphId: null,
       editingSubgraphText: '',
       editingSubgraphStyle: {},
@@ -6644,6 +6671,7 @@ Vue.component('mermaid-preview', {
       var hadEdgeToolbar = !!self.edgeToolbar;
       self.contextMenu = null;
       self.edgeToolbar = null;
+      self.subgraphTitleToolbar = null;
       self.flowEdgeColorPicker = false;
       self.flowEdgeBodyPicker = false;
       self.flowEdgeHeadPicker = false;
@@ -7625,8 +7653,10 @@ Vue.component('mermaid-preview', {
         }
       } else if (toolbar.type === 'message') {
         SequenceSvgHandler.startMessageEdit(toolbar.index, toolbar.x, toolbar.y, svgEl, this._buildCtxLite());
-      } else if (toolbar.type === 'block') {
+      } else if (toolbar.type === 'block' || toolbar.type === 'block-title') {
         this._buildCtxLite().openSequenceBlockEdit(toolbar.blockId, toolbar.text || '', toolbar.x, toolbar.y);
+      } else if (toolbar.type === 'branch-title') {
+        this._buildCtxLite().openSequenceBranchEdit(toolbar.statementIndex, toolbar.text || '', toolbar.x, toolbar.y);
       } else if (toolbar.type === 'note') {
         this._buildCtxLite().openSequenceNoteEdit(toolbar.noteStatementIndex, toolbar.text || '', toolbar.x, toolbar.y);
       }
@@ -7646,13 +7676,18 @@ Vue.component('mermaid-preview', {
           sequenceMessageIndex: this.sequenceToolbar.index
         });
         this.selectedSequenceMessageIndex = null;
-      } else if (this.sequenceToolbar.type === 'block') {
+      } else if (this.sequenceToolbar.type === 'block' || this.sequenceToolbar.type === 'block-title') {
         this.$emit('delete-selected', {
           sequenceParticipantId: null,
           sequenceMessageIndex: null,
           sequenceBlockId: this.sequenceToolbar.blockId
         });
         this.selectedSequenceBlockId = null;
+      } else if (this.sequenceToolbar.type === 'branch-title') {
+        this.$emit('update-sequence-branch-text', {
+          statementIndex: this.sequenceToolbar.statementIndex,
+          text: ''
+        });
       } else if (this.sequenceToolbar.type === 'note') {
         this.$emit('delete-selected', { sequenceNoteStatementIndex: this.sequenceToolbar.noteStatementIndex });
         this.selectedSequenceNoteStatementIndex = null;
@@ -7904,38 +7939,56 @@ Vue.component('mermaid-preview', {
 
           if (!sgId) return;
 
-          labelEl.style.cursor = 'text';
+          labelEl.style.cursor = 'pointer';
           labelEl.addEventListener('click', function (e) {
             e.stopPropagation();
             var canvas = self.$refs.canvas;
-            var rect = labelEl.getBoundingClientRect();
             var cr = canvas ? canvas.getBoundingClientRect() : { left: 0, top: 0 };
-            // sgId 문자열을 클로저에 캡처. 클릭 시점의 최신 model에서 title을 읽는다.
-            var currentSg = ((self.model && self.model.subgraphs) || []).filter(function (s) { return s.id === sgId; })[0];
-            self.editingSubgraphId   = sgId;
-            self.editingSubgraphText = currentSg ? currentSg.title : sgId;
-            self.editingSubgraphStyle = {
-              position: 'absolute',
-              left:   Math.round(rect.left - cr.left) + 'px',
-              top:    Math.round(rect.top  - cr.top)  + 'px',
-              width:  Math.max(rect.width, 120) + 'px',
-              zIndex: 1000
+            self.subgraphTitleToolbar = {
+              sgId: sgId,
+              x: e.clientX - cr.left,
+              y: e.clientY - cr.top
             };
-            self.$nextTick(function () {
-              var el = self.$refs.editSubgraphInput;
-              if (el) { el.focus(); el.select(); }
-
-              var onOutsideDown = function (me) {
-                var inputEl = self.$refs.editSubgraphInput;
-                if (inputEl && inputEl.contains(me.target)) return;
-                document.removeEventListener('mousedown', onOutsideDown, true);
-                self.confirmSubgraphEdit();
-              };
-              document.addEventListener('mousedown', onOutsideDown, true);
-            });
           });
         })(clusters[i]);
       }
+    },
+
+    subgraphTitleEdit: function () {
+      var tb = this.subgraphTitleToolbar;
+      if (!tb) return;
+      this.subgraphTitleToolbar = null;
+      var currentSg = ((this.model && this.model.subgraphs) || []).filter(function (s) { return s.id === tb.sgId; })[0];
+      var canvas = this.$refs.canvas;
+      var cr = canvas ? canvas.getBoundingClientRect() : { left: 0, top: 0 };
+      this.editingSubgraphId   = tb.sgId;
+      this.editingSubgraphText = currentSg ? currentSg.title : tb.sgId;
+      this.editingSubgraphStyle = {
+        position: 'absolute',
+        left:   tb.x + 'px',
+        top:    tb.y + 'px',
+        width:  '140px',
+        zIndex: 1000
+      };
+      var self = this;
+      this.$nextTick(function () {
+        var el = self.$refs.editSubgraphInput;
+        if (el) { el.focus(); el.select(); }
+        var onOutsideDown = function (me) {
+          var inputEl = self.$refs.editSubgraphInput;
+          if (inputEl && inputEl.contains(me.target)) return;
+          document.removeEventListener('mousedown', onOutsideDown, true);
+          self.confirmSubgraphEdit();
+        };
+        document.addEventListener('mousedown', onOutsideDown, true);
+      });
+    },
+
+    subgraphTitleDelete: function () {
+      var tb = this.subgraphTitleToolbar;
+      if (!tb) return;
+      this.subgraphTitleToolbar = null;
+      this.$emit('remove-subgraph', tb.sgId);
     },
 
     confirmSubgraphEdit: function () {
@@ -8159,6 +8212,10 @@ Vue.component('mermaid-preview', {
           <button class="subgraph-toolbar__btn subgraph-toolbar__btn--confirm" @mousedown.prevent="confirmWrapSubgraph">Wrap in Subgraph</button>\
           <button class="subgraph-toolbar__btn subgraph-toolbar__btn--cancel" @mousedown.prevent="cancelSubgraphToolbar">✕</button>\
         </div>\
+        <div v-if="subgraphTitleToolbar" class="title-context-toolbar" :style="{ left: subgraphTitleToolbar.x + \'px\', top: subgraphTitleToolbar.y + \'px\' }" @click.stop @mousedown.stop>\
+          <button class="title-context-toolbar__btn" @mousedown.prevent="subgraphTitleEdit">Edit ✎</button>\
+          <button class="title-context-toolbar__btn title-context-toolbar__btn--danger" @mousedown.prevent="subgraphTitleDelete">Delete</button>\
+        </div>\
         <div v-if="editingNodeId" class="node-edit-overlay" :style="editInputStyle">\
           <input ref="editInput" class="node-edit-input" v-model="editingText" @keydown="onNodeEditKeyDown" @blur="confirmNodeEdit" />\
         </div>\
@@ -8256,7 +8313,8 @@ Vue.component('mermaid-preview', {
           <button v-if="sequenceToolbar.type === &quot;block&quot;" class="edge-toolbar__btn" :class="{ \'edge-toolbar__btn--active\': sequenceToolbar.kind === &quot;opt&quot; }" @click="sequenceToolbarChangeBlockType(&quot;opt&quot;)">Opt ?</button>\
           <button v-if="sequenceToolbar.type === &quot;block&quot;" class="edge-toolbar__btn" :class="{ \'edge-toolbar__btn--active\': sequenceToolbar.kind === &quot;alt&quot; }" @click="sequenceToolbarChangeBlockType(&quot;alt&quot;)">Alt ⎇</button>\
           <button v-if="sequenceToolbar.type === &quot;block&quot;" class="edge-toolbar__btn" :class="{ \'edge-toolbar__btn--active\': sequenceToolbar.kind === &quot;par&quot; }" @click="sequenceToolbarChangeBlockType(&quot;par&quot;)">Par∥</button>\
-          <button v-if="sequenceToolbar.type !== &quot;block&quot; &amp;&amp; sequenceToolbar.type !== &quot;selection&quot; &amp;&amp; sequenceToolbar.type !== &quot;insert&quot;" class="edge-toolbar__btn" @click="sequenceToolbarEdit">Text ✎</button>\
+          <button v-if="sequenceToolbar.type === &quot;block-title&quot; || sequenceToolbar.type === &quot;branch-title&quot;" class="edge-toolbar__btn" @click="sequenceToolbarEdit">Edit ✎</button>\
+          <button v-if="sequenceToolbar.type !== &quot;block&quot; &amp;&amp; sequenceToolbar.type !== &quot;block-title&quot; &amp;&amp; sequenceToolbar.type !== &quot;branch-title&quot; &amp;&amp; sequenceToolbar.type !== &quot;selection&quot; &amp;&amp; sequenceToolbar.type !== &quot;insert&quot;" class="edge-toolbar__btn" @click="sequenceToolbarEdit">Text ✎</button>\
           <button v-if="sequenceToolbar.type === &quot;participant&quot;" class="edge-toolbar__btn" @click="sequenceToolbarMoveLeft" title="Move left">◀</button>\
           <button v-if="sequenceToolbar.type === &quot;participant&quot;" class="edge-toolbar__btn" @click="sequenceToolbarMoveRight" title="Move right">▶</button>\
           <button v-if="sequenceToolbar.type === &quot;participant&quot;" class="edge-toolbar__btn" @click="sequenceToolbarToggleKind">{{ sequenceToolbar.kind === &quot;actor&quot; ? &quot;→ Participant&quot; : &quot;→ Shape&quot; }}</button>\

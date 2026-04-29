@@ -1686,6 +1686,35 @@
 }
 .subgraph-toolbar__btn--cancel:hover { background: var(--border, #d1d5db); }
 
+/* ===== Subgraph / Block 타이틀 컨텍스트 툴바 ===== */
+.gui-editor-shell .title-context-toolbar {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-lg);
+  padding: 3px 6px;
+  box-shadow: var(--shadow-md);
+  z-index: 1100;
+  pointer-events: all;
+  animation: guiEditorFadeScaleIn var(--transition-fast) both;
+}
+.gui-editor-shell .title-context-toolbar__btn {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  padding: 3px 8px;
+  border-radius: var(--radius-md);
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+.gui-editor-shell .title-context-toolbar__btn:hover { background: var(--bg-light-hover); color: var(--text-primary); }
+.gui-editor-shell .title-context-toolbar__btn--danger:hover { background: rgba(220,38,38,0.07); color: var(--error); }
+
 /* ===== Flowchart rubber-band 선택 영역 하이라이트 ===== */
 .flowchart-sel-highlight {
   fill: rgba(37, 99, 235, 0.08);
