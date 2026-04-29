@@ -35,6 +35,26 @@
 
       nodeEl.style.cursor = 'pointer';
 
+      // model에 없는 노드 = 미지원 문법. 클릭 시 안내만 표시하고 편집 인터랙션은 연결하지 않는다.
+      if (!ctx.findNode(nodeId)) {
+        nodeEl.addEventListener('click', function (e) {
+          e.preventDefault();
+          e.stopPropagation();
+          if (ctx.showUnsupportedHint) ctx.showUnsupportedHint();
+        });
+        nodeEl.addEventListener('dblclick', function (e) {
+          e.preventDefault();
+          e.stopPropagation();
+          if (ctx.showUnsupportedHint) ctx.showUnsupportedHint();
+        });
+        nodeEl.addEventListener('contextmenu', function (e) {
+          e.preventDefault();
+          e.stopPropagation();
+          if (ctx.showUnsupportedHint) ctx.showUnsupportedHint();
+        });
+        return;
+      }
+
       // hover 중에만 포트를 띄워 canvas를 과하게 복잡하게 만들지 않는다.
       nodeEl.addEventListener('mouseenter', function () {
         ctx.setState({ hoveredNodeId: nodeId });

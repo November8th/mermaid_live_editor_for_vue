@@ -42,6 +42,9 @@
         var messages = vm.model.messages || [];
         return messages[messageIndex] || null;
       },
+      showUnsupportedHint: function () {
+        if (vm.showUnsupportedHint) vm.showUnsupportedHint();
+      },
       focusEditInput: function () {
         vm.$nextTick(function () {
           var el = vm.$refs.editInput;

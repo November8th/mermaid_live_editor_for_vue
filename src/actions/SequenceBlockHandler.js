@@ -231,6 +231,20 @@
           ctx
         );
       }
+
+      // 3차: recognized 블록이 소비하지 못한 나머지 labelText = critical/break/box 등
+      // 미지원 문법. 클릭 시 안내 alert만 표시한다.
+      for (var k = blocks.length; k < labelTextEls.length; k++) {
+        var unusedEl = labelTextEls[k];
+        var unusedGroup = unusedEl && (unusedEl.closest ? unusedEl.closest('g') : unusedEl.parentNode);
+        if (!unusedGroup) continue;
+        unusedGroup.style.cursor = 'pointer';
+        unusedGroup.style.pointerEvents = 'all';
+        unusedGroup.addEventListener('click', function (e) {
+          e.stopPropagation();
+          if (ctx.showUnsupportedHint) ctx.showUnsupportedHint();
+        });
+      }
     },
 
     _sortTextElementsByPosition: function (elements) {

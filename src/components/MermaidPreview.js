@@ -88,6 +88,10 @@ Vue.component('mermaid-preview', {
       portDragging:  false,
       hoveredNodeId: null,
 
+      // 미지원 문법 힌트 오버레이
+      unsupportedHint: false,
+      _unsupportedHintTimer: null,
+
       // CSS transform 줌/패닝 상태
       cfgZoom: 1.0,
       panX: 0,
@@ -1317,6 +1321,15 @@ Vue.component('mermaid-preview', {
       void el.offsetWidth;
       el.classList.add('node-new-flash');
       setTimeout(function () { el.classList.remove('node-new-flash'); }, 3000);
+    },
+
+    showUnsupportedHint: function () {
+      var self = this;
+      this.unsupportedHint = true;
+      clearTimeout(this._unsupportedHintTimer);
+      this._unsupportedHintTimer = setTimeout(function () {
+        self.unsupportedHint = false;
+      }, 1500);
     }
   },
 
@@ -1324,6 +1337,9 @@ Vue.component('mermaid-preview', {
     <div class="preview-area" @click.self="selectedNodeId = null; selectedEdgeIndex = null; selectedSequenceParticipantId = null; selectedSequenceMessageIndex = null; selectedSequenceMessageIndices = []; selectedSequenceBlockId = null;">\
         <div v-if="portDragging" class="edge-mode-overlay" style="background: var(--success);">\
           {{ model.type === &quot;sequence&quot; ? &quot;Release on target participant to insert message&quot; : &quot;Release on target node to connect&quot; }}\
+        </div>\
+        <div v-if="unsupportedHint" class="edge-mode-overlay" style="background: #f59e0b;">\
+          Unsupported element cannot be edited\
         </div>\
       <div v-if="svgContent" :key="renderCounter" ref="canvas" class="preview-area__canvas">\
         <div class="preview-area__svg-host" v-html="svgContent"></div>\

@@ -1,6 +1,6 @@
 /**
  * gui-editor.component.js
- * Built: 2026-04-29T01:08:55.234Z
+ * Built: 2026-04-29T01:43:18.355Z
  *
  * Concatenation of gui-editor source files (no minification).
  * Requires global Vue 2 and Mermaid loaded separately.
@@ -3009,6 +3009,9 @@
         var messages = vm.model.messages || [];
         return messages[messageIndex] || null;
       },
+      showUnsupportedHint: function () {
+        if (vm.showUnsupportedHint) vm.showUnsupportedHint();
+      },
       focusEditInput: function () {
         vm.$nextTick(function () {
           var el = vm.$refs.editInput;
@@ -3468,6 +3471,26 @@
       if (!nodeId) return;
 
       nodeEl.style.cursor = 'pointer';
+
+      // model에 없는 노드 = 미지원 문법. 클릭 시 안내만 표시하고 편집 인터랙션은 연결하지 않는다.
+      if (!ctx.findNode(nodeId)) {
+        nodeEl.addEventListener('click', function (e) {
+          e.preventDefault();
+          e.stopPropagation();
+          if (ctx.showUnsupportedHint) ctx.showUnsupportedHint();
+        });
+        nodeEl.addEventListener('dblclick', function (e) {
+          e.preventDefault();
+          e.stopPropagation();
+          if (ctx.showUnsupportedHint) ctx.showUnsupportedHint();
+        });
+        nodeEl.addEventListener('contextmenu', function (e) {
+          e.preventDefault();
+          e.stopPropagation();
+          if (ctx.showUnsupportedHint) ctx.showUnsupportedHint();
+        });
+        return;
+      }
 
       // hover 중에만 포트를 띄워 canvas를 과하게 복잡하게 만들지 않는다.
       nodeEl.addEventListener('mouseenter', function () {
@@ -5110,6 +5133,20 @@
           ctx
         );
       }
+
+      // 3차: recognized 블록이 소비하지 못한 나머지 labelText = critical/break/box 등
+      // 미지원 문법. 클릭 시 안내 alert만 표시한다.
+      for (var k = blocks.length; k < labelTextEls.length; k++) {
+        var unusedEl = labelTextEls[k];
+        var unusedGroup = unusedEl && (unusedEl.closest ? unusedEl.closest('g') : unusedEl.parentNode);
+        if (!unusedGroup) continue;
+        unusedGroup.style.cursor = 'pointer';
+        unusedGroup.style.pointerEvents = 'all';
+        unusedGroup.addEventListener('click', function (e) {
+          e.stopPropagation();
+          if (ctx.showUnsupportedHint) ctx.showUnsupportedHint();
+        });
+      }
     },
 
     _sortTextElementsByPosition: function (elements) {
@@ -6391,6 +6428,10 @@ Vue.component('mermaid-preview', {
       portDragging:  false,
       hoveredNodeId: null,
 
+      // 미지원 문법 힌트 오버레이
+      unsupportedHint: false,
+      _unsupportedHintTimer: null,
+
       // CSS transform 줌/패닝 상태
       cfgZoom: 1.0,
       panX: 0,
@@ -7620,6 +7661,15 @@ Vue.component('mermaid-preview', {
       void el.offsetWidth;
       el.classList.add('node-new-flash');
       setTimeout(function () { el.classList.remove('node-new-flash'); }, 3000);
+    },
+
+    showUnsupportedHint: function () {
+      var self = this;
+      this.unsupportedHint = true;
+      clearTimeout(this._unsupportedHintTimer);
+      this._unsupportedHintTimer = setTimeout(function () {
+        self.unsupportedHint = false;
+      }, 1500);
     }
   },
 
@@ -7627,6 +7677,9 @@ Vue.component('mermaid-preview', {
     <div class="preview-area" @click.self="selectedNodeId = null; selectedEdgeIndex = null; selectedSequenceParticipantId = null; selectedSequenceMessageIndex = null; selectedSequenceMessageIndices = []; selectedSequenceBlockId = null;">\
         <div v-if="portDragging" class="edge-mode-overlay" style="background: var(--success);">\
           {{ model.type === &quot;sequence&quot; ? &quot;Release on target participant to insert message&quot; : &quot;Release on target node to connect&quot; }}\
+        </div>\
+        <div v-if="unsupportedHint" class="edge-mode-overlay" style="background: #f59e0b;">\
+          Unsupported element cannot be edited\
         </div>\
       <div v-if="svgContent" :key="renderCounter" ref="canvas" class="preview-area__canvas">\
         <div class="preview-area__svg-host" v-html="svgContent"></div>\
