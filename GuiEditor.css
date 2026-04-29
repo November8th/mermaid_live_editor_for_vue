@@ -1628,3 +1628,12 @@
 .gui-editor-shell .edge-toolbar__type-option {
   border-radius: 0;
 }
+
+/* ===== 새 노드 추가 시 반짝 이펙트 ===== */
+@keyframes node-new-flash {
+  0%, 100% { filter: none; }
+  50%       { filter: drop-shadow(0 0 10px #3b82f6) brightness(1.14); }
+}
+.preview-area__canvas .node-new-flash {
+  animation: node-new-flash 0.75s ease-in-out 4;
+}

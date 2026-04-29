@@ -384,6 +384,12 @@ Vue.component('mermaid-preview', {
         SequenceSvgHandler.attach(svgEl, this.model, sequenceCtx);
         SequenceBlockHandler.initOverlay(svgEl);
         SequenceBlockHandler.attach(svgEl, this.model, sequenceCtx);
+
+        if (this._pendingHighlightParticipantId) {
+          var pendingPid = this._pendingHighlightParticipantId;
+          this._pendingHighlightParticipantId = null;
+          this._flashParticipant(svgEl, pendingPid);
+        }
       }
 
       // 배경 클릭 시 선택 해제
@@ -402,6 +408,12 @@ Vue.component('mermaid-preview', {
 
       this._refreshFloatingUiPositions();
       this._syncSelectedEdgeVisuals();
+
+      if (this._pendingHighlightNodeId) {
+        var pendingId = this._pendingHighlightNodeId;
+        this._pendingHighlightNodeId = null;
+        this._flashNode(pendingId);
+      }
 
     },
 
@@ -1275,6 +1287,36 @@ Vue.component('mermaid-preview', {
       if (!canvas) return;
       var rect = canvas.getBoundingClientRect();
       this._zoomAtClient(0.8, rect.left + rect.width / 2, rect.top + rect.height / 2);
+    },
+
+    highlightNewNode: function (nodeId) {
+      this._pendingHighlightNodeId = nodeId;
+    },
+
+    _flashNode: function (nodeId) {
+      var el = this._elements && this._elements[nodeId];
+      if (!el) return;
+      el.classList.remove('node-new-flash');
+      void el.offsetWidth;
+      el.classList.add('node-new-flash');
+      setTimeout(function () { el.classList.remove('node-new-flash'); }, 3000);
+    },
+
+    highlightNewParticipant: function (participantId) {
+      this._pendingHighlightParticipantId = participantId;
+    },
+
+    _flashParticipant: function (svgEl, participantId) {
+      var targets = SequencePositionTracker.collectParticipantTargets(svgEl, this.model);
+      var el = null;
+      for (var i = 0; i < targets.length; i++) {
+        if (targets[i].id === participantId) { el = targets[i].el; break; }
+      }
+      if (!el) return;
+      el.classList.remove('node-new-flash');
+      void el.offsetWidth;
+      el.classList.add('node-new-flash');
+      setTimeout(function () { el.classList.remove('node-new-flash'); }, 3000);
     }
   },
 

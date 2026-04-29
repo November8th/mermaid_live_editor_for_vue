@@ -40,15 +40,17 @@
 
         if (!nodeShape) nodeShape = 'rect';
 
-        this._applyFlowchartEdit(
+        var newNodeId = this.nodeIdAllocator.next(this.script, this.model.nodes);
+        var applied = this._applyFlowchartEdit(
           flowchartModelEditing.addNode(this.model, {
-            id: this.nodeIdAllocator.next(this.script, this.model.nodes),
+            id: newNodeId,
             text: nodeText,
             shape: nodeShape,
             fill: nodeFill
           }),
           { fitPreview: true }
         );
+        if (applied) this._notifyNewNode(newNodeId);
       },
 
       addEdge: function (data) {

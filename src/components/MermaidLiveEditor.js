@@ -82,6 +82,14 @@ Vue.component('mermaid-live-editor', {
       if (this.$refs.preview) this.$refs.preview.scheduleFit();
     },
 
+    _notifyNewNode: function (nodeId) {
+      if (this.$refs.preview) this.$refs.preview.highlightNewNode(nodeId);
+    },
+
+    _notifyNewParticipant: function (participantId) {
+      if (this.$refs.preview) this.$refs.preview.highlightNewParticipant(participantId);
+    },
+
 
     // ── 스냅샷 헬퍼 ───────────────────────────────────────────────
     _snapshot: function () {

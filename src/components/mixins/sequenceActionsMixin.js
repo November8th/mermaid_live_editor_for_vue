@@ -27,20 +27,24 @@
 
       addSequenceParticipant: function () {
         if (this.isFlowchart) return;
-        this._applySequenceEdit(sequenceModelEditing.addParticipant(this.model, {
-          id: this.participantIdAllocator.next(this.script, this.model.participants),
+        var newId = this.participantIdAllocator.next(this.script, this.model.participants);
+        var applied = this._applySequenceEdit(sequenceModelEditing.addParticipant(this.model, {
+          id: newId,
           label: 'Participant ' + this.participantIdAllocator.counter,
           kind: 'participant'
         }));
+        if (applied) this._notifyNewParticipant(newId);
       },
 
       addSequenceActor: function () {
         if (this.isFlowchart) return;
-        this._applySequenceEdit(sequenceModelEditing.addParticipant(this.model, {
-          id: this.participantIdAllocator.next(this.script, this.model.participants),
+        var newId = this.participantIdAllocator.next(this.script, this.model.participants);
+        var applied = this._applySequenceEdit(sequenceModelEditing.addParticipant(this.model, {
+          id: newId,
           label: 'Actor ' + this.participantIdAllocator.counter,
           kind: 'actor'
         }));
+        if (applied) this._notifyNewParticipant(newId);
       },
 
       toggleParticipantKind: function (data) {
