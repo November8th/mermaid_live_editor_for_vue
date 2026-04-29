@@ -12,7 +12,8 @@ Vue.component('mermaid-full-editor', {
   mixins: [flowchartActionsMixin, sequenceActionsMixin, exportMixin, toastMixin],
 
   props: {
-    value: { type: String, default: '' }
+    value:      { type: String,  default: '' },
+    hideEditor: { type: Boolean, default: false }
   },
 
   data: function () {
@@ -187,7 +188,7 @@ Vue.component('mermaid-full-editor', {
 
   template: '\
     <div class="gui-editor-shell" :class="{ \'gui-editor-shell--fullscreen\': fullScreen }">\
-      <div v-if="!fullScreen" class="gui-editor-shell__editor-pane">\
+      <div v-if="!fullScreen && !hideEditor" class="gui-editor-shell__editor-pane">\
         <mermaid-editor\
           :value="script"\
           :error="error"\

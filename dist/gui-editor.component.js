@@ -1,6 +1,6 @@
 /**
  * gui-editor.component.js
- * Built: 2026-04-29T05:24:19.624Z
+ * Built: 2026-04-29T06:22:00.395Z
  *
  * Concatenation of gui-editor source files (no minification).
  * Requires global Vue 2 and Mermaid loaded separately.
@@ -8369,7 +8369,8 @@ Vue.component('mermaid-full-editor', {
   mixins: [flowchartActionsMixin, sequenceActionsMixin, exportMixin, toastMixin],
 
   props: {
-    value: { type: String, default: '' }
+    value:      { type: String,  default: '' },
+    hideEditor: { type: Boolean, default: false }
   },
 
   data: function () {
@@ -8544,7 +8545,7 @@ Vue.component('mermaid-full-editor', {
 
   template: '\
     <div class="gui-editor-shell" :class="{ \'gui-editor-shell--fullscreen\': fullScreen }">\
-      <div v-if="!fullScreen" class="gui-editor-shell__editor-pane">\
+      <div v-if="!fullScreen && !hideEditor" class="gui-editor-shell__editor-pane">\
         <mermaid-editor\
           :value="script"\
           :error="error"\

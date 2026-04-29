@@ -542,7 +542,44 @@ preview DOM은 삭제하지 않으시고, GUI editor가 렌더한 최신 SVG를 
 - 기존 preview DOM이 저장 기준이라면 제거하지 말고 숨기기만 하시는 편이 좋습니다.
 - 최초 오픈 시 Mermaid 문자열이 이미 있다면 초기에 한 번 렌더를 보장해주시는 것이 좋습니다.
 
-## 6. 체크리스트
+## 6. 텍스트 에디터 없이 GUI만 임베드하기
+
+텍스트 입력 영역 없이 GUI 프리뷰 패널만 표시하고 싶을 때는 `:hide-editor="true"` 프롭을 사용하시면 됩니다.
+
+```html
+<mermaid-full-editor
+  :value="diagram"
+  @input="diagram = $event"
+  :hide-editor="true"
+  style="height: 600px;"
+></mermaid-full-editor>
+```
+
+이 방식에서:
+
+- 텍스트 에디터 패널이 완전히 숨겨지고 GUI 편집 영역(툴바 + 프리뷰)만 표시됩니다.
+- `diagram` 문자열은 여전히 호스트가 관리하며, GUI 조작 결과는 `@input`으로 호스트에 전달됩니다.
+- 전체화면(fullscreen) 버튼, undo/redo, 노드 추가, export 등 GUI 기능은 그대로 동작합니다.
+
+호스트에 별도 텍스트 에디터가 있거나, 다이어그램을 코드 없이 GUI로만 조작하는 환경에 적합합니다.
+
+```html
+<div id="app">
+  <!-- 호스트 텍스트 에디터 (별도 운영) -->
+  <textarea v-model="diagram" style="width: 100%; height: 200px;"></textarea>
+
+  <!-- GUI 에디터 단독 임베드 -->
+  <div style="height: 600px;">
+    <mermaid-full-editor
+      :value="diagram"
+      @input="diagram = $event"
+      :hide-editor="true"
+    ></mermaid-full-editor>
+  </div>
+</div>
+```
+
+## 7. 체크리스트
 
 임베드 전에 아래 항목을 확인하시면 됩니다.
 
@@ -552,5 +589,6 @@ preview DOM은 삭제하지 않으시고, GUI editor가 렌더한 최신 SVG를 
 4. `<mermaid-full-editor :value="diagram" @input="diagram = $event">`를 연결합니다.
 5. 기존 preview/save 경로가 있으면 `@svg-rendered`가 필요한지 확인합니다.
 6. 컨테이너 높이를 지정합니다.
+7. 텍스트 에디터 없이 GUI만 보여줄 경우 `:hide-editor="true"`를 추가합니다.
 
 </details>
