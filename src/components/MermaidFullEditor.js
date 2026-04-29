@@ -91,17 +91,25 @@ Vue.component('mermaid-full-editor', {
   methods: {
 
     // hide-editor 모드에서 Bootstrap 모달 등 display:none 컨테이너 안에 마운트될 때
-    // 컨테이너가 0 크기 → 유효 크기로 전환되는 순간 fitView를 호출한다.
+    // getBBox/getBoundingClientRect가 0을 반환한 채로 postRenderSetup이 실행되어
+    // 핸들러 좌표 맵핑이 깨지는 문제를 방지한다.
+    // 컨테이너가 0 크기 → 유효 크기로 전환되는 순간(최초 1회) renderDiagram을 재실행해
+    // 올바른 좌표로 postRenderSetup이 다시 붙도록 한다.
     _attachResizeObserver: function () {
       if (typeof ResizeObserver === 'undefined') return;
       var self = this;
       var previewPane = this.$el && this.$el.querySelector('.gui-editor-shell__preview-pane');
       if (!previewPane) return;
+      var initialized = false;
       this._resizeObserver = new ResizeObserver(function (entries) {
         for (var i = 0; i < entries.length; i++) {
           var rect = entries[i].contentRect;
-          if (rect.width > 0 && rect.height > 0) {
-            setTimeout(function () { self.fitView(); }, 50);
+          if (!initialized && rect.width > 0 && rect.height > 0) {
+            initialized = true;
+            if (self.$refs.preview) {
+              self.$refs.preview.scheduleFit();
+              self.$refs.preview.renderDiagram();
+            }
           }
         }
       });
