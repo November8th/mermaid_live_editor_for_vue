@@ -1,6 +1,6 @@
 /**
  * gui-editor.component.js
- * Built: 2026-04-29T05:19:26.895Z
+ * Built: 2026-04-29T05:24:19.624Z
  *
  * Concatenation of gui-editor source files (no minification).
  * Requires global Vue 2 and Mermaid loaded separately.
@@ -5090,30 +5090,37 @@
       return { x: left - pad, y: top - pad, width: right - left + pad * 2, height: bottom - top + pad * 2 };
     },
 
-    attach: function (svgEl, model, ctx) {
+    attach: function (svgEl, model, ctx, canvas) {
       if (!this._overlay) this.initOverlay(svgEl);
       this._bringOverlayToFront(svgEl);
 
       var messages = SequencePositionTracker.collectMessages(svgEl, model);
       this._renderBlockBadges(svgEl, model, ctx);
-      this._attachSelection(svgEl, messages, ctx);
+      this._attachSelection(svgEl, messages, ctx, canvas);
 
       if (ctx.watchSequenceSelectionHighlight) {
         ctx.watchSequenceSelectionHighlight();
       }
     },
 
-    _attachSelection: function (svgEl, messages, ctx) {
+    _attachSelection: function (svgEl, messages, ctx, canvas) {
       var self = this;
 
-      svgEl.addEventListener('contextmenu', function (e) {
+      // contextmenu는 svgEl과 canvas 모두 차단
+      var suppressCtx = function (e) {
         if (e.target && e.target.closest && e.target.closest('#sequence-block-overlay .sequence-block-badge-hit')) return;
         e.preventDefault();
-      });
+      };
+      svgEl.addEventListener('contextmenu', suppressCtx);
+      if (canvas) canvas.addEventListener('contextmenu', suppressCtx, true);
 
-      svgEl.addEventListener('mousedown', function (e) {
+      // mousedown 리스너는 canvas(여백 포함)와 svgEl 양쪽에 붙인다.
+      // canvas가 없으면 svgEl에만 붙임.
+      var dragTarget = canvas || svgEl;
+      dragTarget.addEventListener('mousedown', function (e) {
         if (e.button !== 2) return;
         if (e.target && e.target.closest && e.target.closest('.sequence-block-badge-hit')) return;
+        // badge 영역의 우클릭은 배지 자체 핸들러로 위임
         e.preventDefault();
         e.stopPropagation();
 
@@ -6926,7 +6933,7 @@ Vue.component('mermaid-preview', {
         var sequenceCtx = this._buildCtx(svgEl);
         SequenceSvgHandler.attach(svgEl, this.model, sequenceCtx);
         SequenceBlockHandler.initOverlay(svgEl);
-        SequenceBlockHandler.attach(svgEl, this.model, sequenceCtx);
+        SequenceBlockHandler.attach(svgEl, this.model, sequenceCtx, canvas);
 
         if (this._pendingHighlightParticipantId) {
           var pendingPid = this._pendingHighlightParticipantId;

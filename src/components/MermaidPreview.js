@@ -408,7 +408,7 @@ Vue.component('mermaid-preview', {
         var sequenceCtx = this._buildCtx(svgEl);
         SequenceSvgHandler.attach(svgEl, this.model, sequenceCtx);
         SequenceBlockHandler.initOverlay(svgEl);
-        SequenceBlockHandler.attach(svgEl, this.model, sequenceCtx);
+        SequenceBlockHandler.attach(svgEl, this.model, sequenceCtx, canvas);
 
         if (this._pendingHighlightParticipantId) {
           var pendingPid = this._pendingHighlightParticipantId;
