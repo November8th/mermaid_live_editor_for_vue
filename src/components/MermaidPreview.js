@@ -1359,21 +1359,58 @@ Vue.component('mermaid-preview', {
       var subgraphs = (this.model && this.model.subgraphs) || [];
       if (!subgraphs.length) return;
 
+      // id → subgraph 빠른 탐색용 맵
+      var sgById = {};
+      for (var k = 0; k < subgraphs.length; k++) sgById[subgraphs[k].id] = subgraphs[k];
+
       var clusters = svgEl.querySelectorAll('.cluster');
       for (var i = 0; i < clusters.length; i++) {
         (function (clusterEl) {
           var labelEl = clusterEl.querySelector('.cluster-label');
           if (!labelEl) return;
 
-          // label 텍스트로 model subgraph 매핑
-          var labelText = (labelEl.textContent || '').trim();
-          var sg = null;
-          for (var j = 0; j < subgraphs.length; j++) {
-            if (subgraphs[j].title === labelText || subgraphs[j].id === labelText) {
-              sg = subgraphs[j]; break;
+          // Mermaid SVG에서 .node는 .cluster의 DOM 자식이 아닌 형제다.
+          // postRenderSetup에서 이미 수집된 _elements(nodeId → DOM el)와
+          // getBoundingClientRect으로 화면 좌표 기준 기하학적 포함 여부를 확인해 매핑.
+          var sgId = null;
+          var clusterRect = clusterEl.getBoundingClientRect();
+          var nodeIdsInCluster = [];
+          var elements = self._elements || {};
+          for (var nodeId in elements) {
+            var nodeEl = elements[nodeId];
+            if (!nodeEl) continue;
+            var nr = nodeEl.getBoundingClientRect();
+            var nCx = nr.left + nr.width  / 2;
+            var nCy = nr.top  + nr.height / 2;
+            if (nCx >= clusterRect.left && nCx <= clusterRect.right &&
+                nCy >= clusterRect.top  && nCy <= clusterRect.bottom) {
+              nodeIdsInCluster.push(nodeId);
             }
           }
-          if (!sg) return;
+          if (nodeIdsInCluster.length > 0) {
+            var bestScore = 0;
+            for (var j = 0; j < subgraphs.length; j++) {
+              var nodeIds = subgraphs[j].nodeIds || [];
+              var score = 0;
+              for (var m = 0; m < nodeIdsInCluster.length; m++) {
+                if (nodeIds.indexOf(nodeIdsInCluster[m]) !== -1) score++;
+              }
+              if (score > bestScore) { bestScore = score; sgId = subgraphs[j].id; }
+            }
+          }
+
+          // fallback: cluster DOM id (Mermaid 버전에 따라 subgraph id 그대로이거나 cluster_ 접두사)
+          if (!sgId) {
+            var rawId = clusterEl.getAttribute('data-id') || clusterEl.id || '';
+            if (rawId && sgById[rawId]) {
+              sgId = rawId;
+            } else if (rawId) {
+              var stripped = rawId.replace(/^cluster_/, '');
+              if (sgById[stripped]) sgId = stripped;
+            }
+          }
+
+          if (!sgId) return;
 
           labelEl.style.cursor = 'text';
           labelEl.addEventListener('click', function (e) {
@@ -1381,8 +1418,10 @@ Vue.component('mermaid-preview', {
             var canvas = self.$refs.canvas;
             var rect = labelEl.getBoundingClientRect();
             var cr = canvas ? canvas.getBoundingClientRect() : { left: 0, top: 0 };
-            self.editingSubgraphId   = sg.id;
-            self.editingSubgraphText = sg.title;
+            // sgId 문자열을 클로저에 캡처. 클릭 시점의 최신 model에서 title을 읽는다.
+            var currentSg = ((self.model && self.model.subgraphs) || []).filter(function (s) { return s.id === sgId; })[0];
+            self.editingSubgraphId   = sgId;
+            self.editingSubgraphText = currentSg ? currentSg.title : sgId;
             self.editingSubgraphStyle = {
               position: 'absolute',
               left:   Math.round(rect.left - cr.left) + 'px',
@@ -1394,7 +1433,6 @@ Vue.component('mermaid-preview', {
               var el = self.$refs.editSubgraphInput;
               if (el) { el.focus(); el.select(); }
 
-              // 인풋 바깥 mousedown 시 즉시 confirm
               var onOutsideDown = function (me) {
                 var inputEl = self.$refs.editSubgraphInput;
                 if (inputEl && inputEl.contains(me.target)) return;
