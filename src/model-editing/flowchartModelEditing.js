@@ -187,5 +187,51 @@
     }
   };
 
+  flowchartModelEditing.updateSubgraphTitle = function (model, subgraphId, title) {
+    if (!model || !subgraphId) return model;
+    var subgraphs = model.subgraphs || [];
+    var found = false;
+    var nextSubgraphs = subgraphs.map(function (sg) {
+      if (sg.id !== subgraphId) return sg;
+      found = true;
+      return Object.assign({}, sg, { title: title });
+    });
+    return found ? Object.assign({}, model, { subgraphs: nextSubgraphs }) : model;
+  };
+
+  flowchartModelEditing.removeSubgraph = function (model, subgraphId) {
+    if (!model || !subgraphId) return model;
+    var subgraphs = model.subgraphs || [];
+    var nextSubgraphs = subgraphs.filter(function (sg) { return sg.id !== subgraphId; });
+    if (nextSubgraphs.length === subgraphs.length) return model;
+    return Object.assign({}, model, { subgraphs: nextSubgraphs });
+  };
+
+  flowchartModelEditing.wrapNodesInSubgraph = function (model, nodeIds, title) {
+    if (!model || !nodeIds || !nodeIds.length) return model;
+
+    // 유효한 node ID만 포함
+    var validIds = [];
+    var nodeMap = {};
+    for (var i = 0; i < (model.nodes || []).length; i++) {
+      nodeMap[model.nodes[i].id] = true;
+    }
+    for (var j = 0; j < nodeIds.length; j++) {
+      if (nodeMap[nodeIds[j]]) validIds.push(nodeIds[j]);
+    }
+    if (!validIds.length) return model;
+
+    // 기존 subgraph ID와 충돌하지 않는 ID 생성
+    var existing = {};
+    var prevSgs = model.subgraphs || [];
+    for (var k = 0; k < prevSgs.length; k++) existing[prevSgs[k].id] = true;
+    var counter = prevSgs.length + 1;
+    var sgId = 'SG_' + counter;
+    while (existing[sgId]) sgId = 'SG_' + (++counter);
+
+    var newSg = { id: sgId, title: title && title.trim() ? title.trim() : sgId, nodeIds: validIds.slice() };
+    return Object.assign({}, model, { subgraphs: prevSgs.concat([newSg]) });
+  };
+
   global.flowchartModelEditing = flowchartModelEditing;
 })(typeof window !== 'undefined' ? window : this);

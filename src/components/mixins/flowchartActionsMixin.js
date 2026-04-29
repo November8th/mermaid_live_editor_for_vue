@@ -112,6 +112,30 @@
         if (!nextModel || nextModel === this.model) return false;
         this.model = nextModel;
         return true;
+      },
+
+      wrapNodesInSubgraph: function (data) {
+        if (!this.isFlowchart || !data || !data.nodeIds || !data.nodeIds.length) return;
+        this._applyFlowchartEdit(
+          flowchartModelEditing.wrapNodesInSubgraph(this.model, data.nodeIds, data.title),
+          { fitPreview: false }
+        );
+      },
+
+      updateSubgraphTitle: function (data) {
+        if (!this.isFlowchart || !data || !data.subgraphId) return;
+        this._applyFlowchartEdit(
+          flowchartModelEditing.updateSubgraphTitle(this.model, data.subgraphId, data.title),
+          { fitPreview: false }
+        );
+      },
+
+      removeSubgraph: function (subgraphId) {
+        if (!this.isFlowchart || !subgraphId) return;
+        this._applyFlowchartEdit(
+          flowchartModelEditing.removeSubgraph(this.model, subgraphId),
+          { fitPreview: false }
+        );
       }
     }
   };

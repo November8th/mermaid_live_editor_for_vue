@@ -1,6 +1,6 @@
 /**
  * gui-editor.component.js
- * Built: 2026-04-29T01:57:32.655Z
+ * Built: 2026-04-29T02:52:51.987Z
  *
  * Concatenation of gui-editor source files (no minification).
  * Requires global Vue 2 and Mermaid loaded separately.
@@ -1707,11 +1707,14 @@
       direction: 'TD',
       nodes: [],
       edges: [],
+      subgraphs: [],
       statements: [],
       _nodeMap: {},
       _pendingEdge: null,
       _edgeRefCounts: {},
       _sourceTextCounts: {},
+      _subgraphStack: [],
+      _subgraphMap: {},
       diagnostics: {
         rawStatementCount: 0,
         rawTargets: []
@@ -1759,9 +1762,36 @@
       }
 
       if (!started) continue;
-      if (line.indexOf('subgraph') === 0 || line === 'end') {
-        pushRawTarget(model, line, i + 1, 'subgraph', sourceInfo);
-        pushRawStatement(model, line);
+
+      // subgraph open: "subgraph id [title]" or "subgraph title" or "subgraph"
+      if (/^subgraph\b/.test(line)) {
+        var sgRest = line.slice('subgraph'.length).trim();
+        var sgId, sgTitle;
+        // "id [title]" 형태
+        var sgBracket = sgRest.match(/^([A-Za-z_ㄱ-힝][A-Za-z0-9_ㄱ-힝]*)\s+\[(.+)\]$/);
+        // "id" 만 있는 형태
+        var sgIdOnly = sgRest.match(/^([A-Za-z_ㄱ-힝][A-Za-z0-9_ㄱ-힝]*)$/);
+        if (sgBracket) {
+          sgId = sgBracket[1];
+          sgTitle = sgBracket[2].trim();
+        } else if (sgIdOnly) {
+          sgId = sgIdOnly[1];
+          sgTitle = sgId;
+        } else {
+          // title만 있거나 빈 경우
+          sgId = 'SG_' + (model.subgraphs.length + 1);
+          sgTitle = sgRest || sgId;
+        }
+        var sg = { id: sgId, title: sgTitle, nodeIds: [] };
+        model.subgraphs.push(sg);
+        model._subgraphMap[sgId] = sg;
+        model._subgraphStack.push(sg);
+        continue;
+      }
+
+      // subgraph close
+      if (line === 'end') {
+        if (model._subgraphStack.length) model._subgraphStack.pop();
         continue;
       }
 
@@ -1770,6 +1800,16 @@
         pushRawTarget(model, line, i + 1, 'flow-line', sourceInfo);
         pushRawStatement(model, line);
       } else {
+        // 현재 subgraph 안에 있으면 선언된 노드를 subgraph에 등록
+        if (model._subgraphStack.length) {
+          var currentSg = model._subgraphStack[model._subgraphStack.length - 1];
+          var stmtNodeIds = statement.nodeIds || [];
+          for (var ni = 0; ni < stmtNodeIds.length; ni++) {
+            if (currentSg.nodeIds.indexOf(stmtNodeIds[ni]) === -1) {
+              currentSg.nodeIds.push(stmtNodeIds[ni]);
+            }
+          }
+        }
         model.statements.push(statement);
       }
     }
@@ -1783,6 +1823,8 @@
     delete model._edgeRefCounts;
     delete model._sourceTextCounts;
     delete model._diagnostics;
+    delete model._subgraphStack;
+    delete model._subgraphMap;
 
     return model;
   }
@@ -1952,6 +1994,39 @@
     return parts.join(' ');
   }
 
+  function buildSubgraphNodeMap(subgraphs) {
+    var map = {};
+    if (!subgraphs) return map;
+    for (var i = 0; i < subgraphs.length; i++) {
+      var sg = subgraphs[i];
+      for (var j = 0; j < sg.nodeIds.length; j++) {
+        map[sg.nodeIds[j]] = sg.id;
+      }
+    }
+    return map;
+  }
+
+  function generateSubgraphs(model, lines, usedNodes) {
+    var subgraphs = model.subgraphs || [];
+    if (!subgraphs.length) return;
+    for (var i = 0; i < subgraphs.length; i++) {
+      var sg = subgraphs[i];
+      var header = sg.title && sg.title !== sg.id
+        ? 'subgraph ' + sg.id + ' [' + sg.title + ']'
+        : 'subgraph ' + sg.id;
+      lines.push('    ' + header);
+      for (var j = 0; j < sg.nodeIds.length; j++) {
+        var nid = sg.nodeIds[j];
+        var node = findNode(model.nodes, nid);
+        if (node) {
+          lines.push('        ' + generateNode(node));
+          usedNodes[nid] = true;
+        }
+      }
+      lines.push('    end');
+    }
+  }
+
   function generateMermaid(model) {
     if (!model) return '';
     if (model.type === 'sequenceDiagram' && global.SequenceGenerator) {
@@ -1962,11 +2037,17 @@
     var direction = model.direction || 'TD';
     lines.push('flowchart ' + direction);
 
+    var usedNodes = {};
+    var usedEdges = {};
+    var subgraphs = model.subgraphs || [];
+
+    // subgraph 블록을 먼저 출력하고, 소속 노드를 usedNodes에 기록한다.
+    if (subgraphs.length) {
+      generateSubgraphs(model, lines, usedNodes);
+    }
+
     var statements = model.statements || [];
     if (statements.length) {
-      var usedNodes = {};
-      var usedEdges = {};
-
       for (var s = 0; s < statements.length; s++) {
         var statement = statements[s];
         var line = '';
@@ -2021,6 +2102,7 @@
 
     if (model.nodes && model.nodes.length > 0) {
       for (var i = 0; i < model.nodes.length; i++) {
+        if (usedNodes[model.nodes[i].id]) continue;
         lines.push('    ' + generateNode(model.nodes[i]));
       }
     }
@@ -2262,6 +2344,52 @@
 
       return model;
     }
+  };
+
+  flowchartModelEditing.updateSubgraphTitle = function (model, subgraphId, title) {
+    if (!model || !subgraphId) return model;
+    var subgraphs = model.subgraphs || [];
+    var found = false;
+    var nextSubgraphs = subgraphs.map(function (sg) {
+      if (sg.id !== subgraphId) return sg;
+      found = true;
+      return Object.assign({}, sg, { title: title });
+    });
+    return found ? Object.assign({}, model, { subgraphs: nextSubgraphs }) : model;
+  };
+
+  flowchartModelEditing.removeSubgraph = function (model, subgraphId) {
+    if (!model || !subgraphId) return model;
+    var subgraphs = model.subgraphs || [];
+    var nextSubgraphs = subgraphs.filter(function (sg) { return sg.id !== subgraphId; });
+    if (nextSubgraphs.length === subgraphs.length) return model;
+    return Object.assign({}, model, { subgraphs: nextSubgraphs });
+  };
+
+  flowchartModelEditing.wrapNodesInSubgraph = function (model, nodeIds, title) {
+    if (!model || !nodeIds || !nodeIds.length) return model;
+
+    // 유효한 node ID만 포함
+    var validIds = [];
+    var nodeMap = {};
+    for (var i = 0; i < (model.nodes || []).length; i++) {
+      nodeMap[model.nodes[i].id] = true;
+    }
+    for (var j = 0; j < nodeIds.length; j++) {
+      if (nodeMap[nodeIds[j]]) validIds.push(nodeIds[j]);
+    }
+    if (!validIds.length) return model;
+
+    // 기존 subgraph ID와 충돌하지 않는 ID 생성
+    var existing = {};
+    var prevSgs = model.subgraphs || [];
+    for (var k = 0; k < prevSgs.length; k++) existing[prevSgs[k].id] = true;
+    var counter = prevSgs.length + 1;
+    var sgId = 'SG_' + counter;
+    while (existing[sgId]) sgId = 'SG_' + (++counter);
+
+    var newSg = { id: sgId, title: title && title.trim() ? title.trim() : sgId, nodeIds: validIds.slice() };
+    return Object.assign({}, model, { subgraphs: prevSgs.concat([newSg]) });
   };
 
   global.flowchartModelEditing = flowchartModelEditing;
@@ -5691,6 +5819,30 @@
         if (!nextModel || nextModel === this.model) return false;
         this.model = nextModel;
         return true;
+      },
+
+      wrapNodesInSubgraph: function (data) {
+        if (!this.isFlowchart || !data || !data.nodeIds || !data.nodeIds.length) return;
+        this._applyFlowchartEdit(
+          flowchartModelEditing.wrapNodesInSubgraph(this.model, data.nodeIds, data.title),
+          { fitPreview: false }
+        );
+      },
+
+      updateSubgraphTitle: function (data) {
+        if (!this.isFlowchart || !data || !data.subgraphId) return;
+        this._applyFlowchartEdit(
+          flowchartModelEditing.updateSubgraphTitle(this.model, data.subgraphId, data.title),
+          { fitPreview: false }
+        );
+      },
+
+      removeSubgraph: function (subgraphId) {
+        if (!this.isFlowchart || !subgraphId) return;
+        this._applyFlowchartEdit(
+          flowchartModelEditing.removeSubgraph(this.model, subgraphId),
+          { fitPreview: false }
+        );
       }
     }
   };
@@ -6428,9 +6580,22 @@ Vue.component('mermaid-preview', {
       portDragging:  false,
       hoveredNodeId: null,
 
-      // 미지원 문법 힌트 오버레이
-      unsupportedHint: false,
-      _unsupportedHintTimer: null,
+      // 힌트 오버레이 (미지원 문법 / 작업 불가 안내)
+      hintMsg: '',
+      hintVisible: false,
+      _hintTimer: null,
+
+      // flowchart 다중선택 (우클릭 드래그 rubber-band)
+      _rubberBand: null,          // { startX, startY, curX, curY } (canvas 기준 px)
+      rubberBandRect: null,       // { left, top, width, height } — template용
+      selectedNodeIds: [],
+      subgraphToolbar: null,      // { x, y } — "Wrap in Subgraph" 버튼 위치
+      subgraphTitleInput: '',
+
+      // subgraph 타이틀 인라인 편집
+      editingSubgraphId: null,
+      editingSubgraphText: '',
+      editingSubgraphStyle: {},
 
       // CSS transform 줌/패닝 상태
       cfgZoom: 1.0,
@@ -6716,6 +6881,12 @@ Vue.component('mermaid-preview', {
 
         // 노드 인터랙션 연결
         SvgNodeHandler.attach(svgEl, this._positions, this._elements, ctx);
+
+        // flowchart 우클릭 드래그 rubber-band 다중선택
+        this._attachFlowchartRubberBand(canvas, svgEl);
+
+        // subgraph 타이틀 클릭 인라인 편집
+        this._attachSubgraphInteractions(svgEl);
 
         if (this._pendingContextMenuNodeId) {
           this._openContextMenuForNode(this._pendingContextMenuNodeId);
@@ -7663,13 +7834,271 @@ Vue.component('mermaid-preview', {
       setTimeout(function () { el.classList.remove('node-new-flash'); }, 3000);
     },
 
-    showUnsupportedHint: function () {
+    _showHint: function (msg) {
       var self = this;
-      this.unsupportedHint = true;
-      clearTimeout(this._unsupportedHintTimer);
-      this._unsupportedHintTimer = setTimeout(function () {
-        self.unsupportedHint = false;
-      }, 1500);
+      this.hintMsg     = msg || '';
+      this.hintVisible = true;
+      clearTimeout(this._hintTimer);
+      this._hintTimer = setTimeout(function () { self.hintVisible = false; }, 1500);
+    },
+
+    showUnsupportedHint: function () {
+      this._showHint('Unsupported element cannot be edited');
+    },
+
+    _attachSubgraphInteractions: function (svgEl) {
+      var self = this;
+      var subgraphs = (this.model && this.model.subgraphs) || [];
+      if (!subgraphs.length) return;
+
+      var clusters = svgEl.querySelectorAll('.cluster');
+      for (var i = 0; i < clusters.length; i++) {
+        (function (clusterEl) {
+          var labelEl = clusterEl.querySelector('.cluster-label');
+          if (!labelEl) return;
+
+          // label 텍스트로 model subgraph 매핑
+          var labelText = (labelEl.textContent || '').trim();
+          var sg = null;
+          for (var j = 0; j < subgraphs.length; j++) {
+            if (subgraphs[j].title === labelText || subgraphs[j].id === labelText) {
+              sg = subgraphs[j]; break;
+            }
+          }
+          if (!sg) return;
+
+          labelEl.style.cursor = 'text';
+          labelEl.addEventListener('click', function (e) {
+            e.stopPropagation();
+            var canvas = self.$refs.canvas;
+            var rect = labelEl.getBoundingClientRect();
+            var cr = canvas ? canvas.getBoundingClientRect() : { left: 0, top: 0 };
+            self.editingSubgraphId   = sg.id;
+            self.editingSubgraphText = sg.title;
+            self.editingSubgraphStyle = {
+              position: 'absolute',
+              left:   Math.round(rect.left - cr.left) + 'px',
+              top:    Math.round(rect.top  - cr.top)  + 'px',
+              width:  Math.max(rect.width, 120) + 'px',
+              zIndex: 1000
+            };
+            self.$nextTick(function () {
+              var el = self.$refs.editSubgraphInput;
+              if (el) { el.focus(); el.select(); }
+
+              // 인풋 바깥 mousedown 시 즉시 confirm
+              var onOutsideDown = function (me) {
+                var inputEl = self.$refs.editSubgraphInput;
+                if (inputEl && inputEl.contains(me.target)) return;
+                document.removeEventListener('mousedown', onOutsideDown, true);
+                self.confirmSubgraphEdit();
+              };
+              document.addEventListener('mousedown', onOutsideDown, true);
+            });
+          });
+        })(clusters[i]);
+      }
+    },
+
+    confirmSubgraphEdit: function () {
+      var id   = this.editingSubgraphId;
+      var text = (this.editingSubgraphText || '').trim();
+      this.editingSubgraphId   = null;
+      this.editingSubgraphText = '';
+      if (!id) return;
+      if (!text) {
+        this.$emit('remove-subgraph', id);
+      } else {
+        this.$emit('update-subgraph-title', { subgraphId: id, title: text });
+      }
+    },
+
+    cancelSubgraphEdit: function () {
+      this.editingSubgraphId   = null;
+      this.editingSubgraphText = '';
+    },
+
+    _onSubgraphEditKeyDown: function (e) {
+      if (e.key === 'Enter') { e.preventDefault(); this.confirmSubgraphEdit(); }
+      if (e.key === 'Escape') { this.cancelSubgraphEdit(); }
+    },
+
+    _attachFlowchartRubberBand: function (canvas, svgEl) {
+      var self = this;
+      var suppressContextMenu = false;
+
+      // 캡처 단계에서 contextmenu를 가로채 브라우저 메뉴와 노드 GUI 메뉴 모두 차단
+      canvas.addEventListener('contextmenu', function (e) {
+        e.preventDefault();                    // 브라우저 기본 메뉴 항상 차단
+        if (suppressContextMenu) {
+          e.stopPropagation();                 // 드래그 후엔 노드 GUI 메뉴도 차단
+          suppressContextMenu = false;
+        }
+      }, true); // capture phase
+
+      canvas.addEventListener('mousedown', function (e) {
+        if (e.button !== 2) return;
+        // 노드 위에서 시작하면 rubber-band 대신 노드 contextmenu로 위임
+        if (e.target && e.target.closest && e.target.closest('.node')) return;
+
+        e.preventDefault();
+        var cr = canvas.getBoundingClientRect();
+        var startX = e.clientX - cr.left;
+        var startY = e.clientY - cr.top;
+        var didDrag = false;
+
+        self._rubberBand = { startX: startX, startY: startY };
+        self.rubberBandRect = null;
+        self.subgraphToolbar = null;
+        self.selectedNodeIds = [];
+
+        var onMove = function (me) {
+          var cr2 = canvas.getBoundingClientRect();
+          var curX = me.clientX - cr2.left;
+          var curY = me.clientY - cr2.top;
+          var w = Math.abs(curX - startX);
+          var h = Math.abs(curY - startY);
+          if (w > 4 || h > 4) {
+            didDrag = true;
+            self.rubberBandRect = {
+              left:   Math.min(startX, curX),
+              top:    Math.min(startY, curY),
+              width:  w,
+              height: h
+            };
+          }
+        };
+
+        var onUp = function (ue) {
+          document.removeEventListener('mousemove', onMove);
+          document.removeEventListener('mouseup', onUp);
+
+          var rb = self.rubberBandRect;
+          self.rubberBandRect = null;
+          self._rubberBand = null;
+
+          if (!didDrag) {
+            // 단순 우클릭 → contextmenu 이벤트 허용 (노드 GUI 메뉴용)
+            suppressContextMenu = false;
+            return;
+          }
+
+          // 드래그였으면 뒤따라오는 contextmenu를 억제
+          suppressContextMenu = true;
+
+          if (!rb || rb.width < 5 || rb.height < 5) return;
+
+          var cr3 = canvas.getBoundingClientRect();
+          var rLeft   = cr3.left + rb.left;
+          var rTop    = cr3.top  + rb.top;
+          var rRight  = rLeft + rb.width;
+          var rBottom = rTop  + rb.height;
+
+          var selectedIds = [];
+          var nodeEls = svgEl.querySelectorAll('.node');
+          for (var i = 0; i < nodeEls.length; i++) {
+            var nodeId = SvgPositionTracker.extractNodeId(nodeEls[i]);
+            if (!nodeId) continue;
+            var nr = nodeEls[i].getBoundingClientRect();
+            var cx = nr.left + nr.width  / 2;
+            var cy = nr.top  + nr.height / 2;
+            if (cx >= rLeft && cx <= rRight && cy >= rTop && cy <= rBottom) {
+              selectedIds.push(nodeId);
+            }
+          }
+
+          if (!selectedIds.length) return;
+
+          self.selectedNodeIds = selectedIds;
+          self._showFlowchartSelectionHighlight(selectedIds);
+          var cr4 = canvas.getBoundingClientRect();
+          self.subgraphToolbar = {
+            x: ue.clientX - cr4.left,
+            y: ue.clientY - cr4.top
+          };
+          self.subgraphTitleInput = '';
+
+          // 다음 mousedown(새 드래그/클릭) 시 툴바 닫기
+          var onNextMouseDown = function () {
+            self._showFlowchartSelectionHighlight([]);
+            self.subgraphToolbar = null;
+            self.selectedNodeIds = [];
+            document.removeEventListener('mousedown', onNextMouseDown);
+          };
+          document.addEventListener('mousedown', onNextMouseDown);
+        };
+
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+      });
+    },
+
+    _showFlowchartSelectionHighlight: function (selectedIds) {
+      var svgEl = this._svgEl;
+      if (!svgEl) return;
+      var old = svgEl.querySelector('#flowchart-sel-highlight');
+      if (old) old.remove();
+      if (!selectedIds || !selectedIds.length) return;
+
+      var pad = 12;
+      var left = Infinity, top = Infinity, right = -Infinity, bottom = -Infinity;
+      for (var i = 0; i < selectedIds.length; i++) {
+        var pos = this._positions[selectedIds[i]];
+        if (!pos) continue;
+        var x = pos.origTx + pos.bboxX;
+        var y = pos.origTy + pos.bboxY;
+        left   = Math.min(left,   x);
+        top    = Math.min(top,    y);
+        right  = Math.max(right,  x + pos.width);
+        bottom = Math.max(bottom, y + pos.height);
+      }
+      if (!isFinite(left)) return;
+
+      var rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+      rect.setAttribute('id', 'flowchart-sel-highlight');
+      rect.setAttribute('x', left - pad);
+      rect.setAttribute('y', top - pad);
+      rect.setAttribute('width',  right - left + pad * 2);
+      rect.setAttribute('height', bottom - top + pad * 2);
+      rect.setAttribute('rx', '6');
+      rect.setAttribute('class', 'flowchart-sel-highlight');
+      rect.style.pointerEvents = 'none';
+      svgEl.appendChild(rect);
+    },
+
+    confirmWrapSubgraph: function () {
+      if (!this.selectedNodeIds.length) return;
+
+      // 선택된 노드 중 이미 subgraph에 속한 게 있으면 생성 차단
+      var subgraphs = (this.model && this.model.subgraphs) || [];
+      for (var i = 0; i < subgraphs.length; i++) {
+        var sg = subgraphs[i];
+        for (var j = 0; j < sg.nodeIds.length; j++) {
+          if (this.selectedNodeIds.indexOf(sg.nodeIds[j]) !== -1) {
+            this._showHint('Selected nodes are already in a subgraph');
+            this._showFlowchartSelectionHighlight([]);
+            this.subgraphToolbar = null;
+            this.selectedNodeIds = [];
+            return;
+          }
+        }
+      }
+
+      this._showFlowchartSelectionHighlight([]);
+      this.$emit('wrap-nodes-in-subgraph', {
+        nodeIds: this.selectedNodeIds.slice(),
+        title: this.subgraphTitleInput || 'Group'
+      });
+      this.subgraphToolbar = null;
+      this.selectedNodeIds = [];
+      this.subgraphTitleInput = '';
+    },
+
+    cancelSubgraphToolbar: function () {
+      this._showFlowchartSelectionHighlight([]);
+      this.subgraphToolbar = null;
+      this.selectedNodeIds = [];
+      this.subgraphTitleInput = '';
     }
   },
 
@@ -7678,11 +8107,20 @@ Vue.component('mermaid-preview', {
         <div v-if="portDragging" class="edge-mode-overlay" style="background: var(--success);">\
           {{ model.type === &quot;sequence&quot; ? &quot;Release on target participant to insert message&quot; : &quot;Release on target node to connect&quot; }}\
         </div>\
-        <div v-if="unsupportedHint" class="edge-mode-overlay" style="background: #f59e0b;">\
-          Unsupported element cannot be edited\
+        <div v-if="hintVisible" class="edge-mode-overlay" style="background: #f59e0b;">\
+          {{ hintMsg }}\
         </div>\
       <div v-if="svgContent" :key="renderCounter" ref="canvas" class="preview-area__canvas">\
         <div class="preview-area__svg-host" v-html="svgContent"></div>\
+        <div v-if="editingSubgraphId" class="node-edit-overlay" :style="editingSubgraphStyle">\
+          <input ref="editSubgraphInput" class="node-edit-input" v-model="editingSubgraphText" @keydown="_onSubgraphEditKeyDown" @blur="confirmSubgraphEdit" />\
+        </div>\
+        <div v-if="rubberBandRect" class="flowchart-rubber-band" :style="{ left: rubberBandRect.left + \'px\', top: rubberBandRect.top + \'px\', width: rubberBandRect.width + \'px\', height: rubberBandRect.height + \'px\' }"></div>\
+        <div v-if="subgraphToolbar" class="subgraph-toolbar" :style="{ left: subgraphToolbar.x + \'px\', top: subgraphToolbar.y + \'px\' }">\
+          <span class="subgraph-toolbar__label">{{ selectedNodeIds.length }} nodes selected</span>\
+          <button class="subgraph-toolbar__btn subgraph-toolbar__btn--confirm" @mousedown.prevent="confirmWrapSubgraph">Wrap in Subgraph</button>\
+          <button class="subgraph-toolbar__btn subgraph-toolbar__btn--cancel" @mousedown.prevent="cancelSubgraphToolbar">✕</button>\
+        </div>\
         <div v-if="editingNodeId" class="node-edit-overlay" :style="editInputStyle">\
           <input ref="editInput" class="node-edit-input" v-model="editingText" @keydown="onNodeEditKeyDown" @blur="confirmNodeEdit" />\
         </div>\
@@ -8045,6 +8483,9 @@ Vue.component('mermaid-full-editor', {
           @add-edge="addEdge"\
           @add-sequence-message="addSequenceMessage"\
           @delete-selected="deleteSelected"\
+          @wrap-nodes-in-subgraph="wrapNodesInSubgraph"\
+          @update-subgraph-title="updateSubgraphTitle"\
+          @remove-subgraph="removeSubgraph"\
           @update-node-text="updateNodeText"\
           @update-node-shape="updateNodeShape"\
           @update-edge-text="updateEdgeText"\

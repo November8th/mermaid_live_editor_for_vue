@@ -1629,6 +1629,70 @@
   border-radius: 0;
 }
 
+/* ===== Flowchart rubber-band 다중선택 ===== */
+.preview-area__canvas .flowchart-rubber-band {
+  position: absolute;
+  border: 1.5px solid #3b82f6;
+  background: rgba(59,130,246,0.10);
+  pointer-events: none;
+  border-radius: 2px;
+  z-index: 60;
+}
+
+.preview-area__canvas .subgraph-toolbar {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--surface, #fff);
+  border: 1px solid var(--border, #d1d5db);
+  border-radius: 8px;
+  padding: 7px 10px;
+  box-shadow: var(--shadow-md, 0 4px 12px rgba(0,0,0,0.12));
+  z-index: 200;
+  white-space: nowrap;
+}
+.subgraph-toolbar__label {
+  font-size: 11px;
+  color: var(--text-muted, #6b7280);
+  margin-right: 2px;
+}
+.subgraph-toolbar__input {
+  font-size: 12px;
+  border: 1px solid var(--border, #d1d5db);
+  border-radius: 5px;
+  padding: 3px 8px;
+  outline: none;
+  width: 120px;
+  background: var(--surface, #fff);
+  color: var(--text, #1b2a4a);
+}
+.subgraph-toolbar__btn {
+  font-size: 12px;
+  font-weight: 600;
+  border: none;
+  border-radius: 5px;
+  padding: 3px 10px;
+  cursor: pointer;
+}
+.subgraph-toolbar__btn--confirm {
+  background: var(--accent-blue, #3b82f6);
+  color: #fff;
+}
+.subgraph-toolbar__btn--confirm:hover { background: #2563eb; }
+.subgraph-toolbar__btn--cancel {
+  background: var(--surface-hover, #f1f5f9);
+  color: var(--text, #1b2a4a);
+}
+.subgraph-toolbar__btn--cancel:hover { background: var(--border, #d1d5db); }
+
+/* ===== Flowchart rubber-band 선택 영역 하이라이트 ===== */
+.flowchart-sel-highlight {
+  fill: rgba(37, 99, 235, 0.08);
+  stroke: rgba(37, 99, 235, 0.6);
+  stroke-width: 1.5px;
+}
+
 /* ===== 새 노드 추가 시 반짝 이펙트 ===== */
 @keyframes node-new-flash {
   0%, 100% { filter: none; }

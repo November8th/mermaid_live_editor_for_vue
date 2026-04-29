@@ -355,11 +355,14 @@
       direction: 'TD',
       nodes: [],
       edges: [],
+      subgraphs: [],
       statements: [],
       _nodeMap: {},
       _pendingEdge: null,
       _edgeRefCounts: {},
       _sourceTextCounts: {},
+      _subgraphStack: [],
+      _subgraphMap: {},
       diagnostics: {
         rawStatementCount: 0,
         rawTargets: []
@@ -407,9 +410,36 @@
       }
 
       if (!started) continue;
-      if (line.indexOf('subgraph') === 0 || line === 'end') {
-        pushRawTarget(model, line, i + 1, 'subgraph', sourceInfo);
-        pushRawStatement(model, line);
+
+      // subgraph open: "subgraph id [title]" or "subgraph title" or "subgraph"
+      if (/^subgraph\b/.test(line)) {
+        var sgRest = line.slice('subgraph'.length).trim();
+        var sgId, sgTitle;
+        // "id [title]" 형태
+        var sgBracket = sgRest.match(/^([A-Za-z_ㄱ-힝][A-Za-z0-9_ㄱ-힝]*)\s+\[(.+)\]$/);
+        // "id" 만 있는 형태
+        var sgIdOnly = sgRest.match(/^([A-Za-z_ㄱ-힝][A-Za-z0-9_ㄱ-힝]*)$/);
+        if (sgBracket) {
+          sgId = sgBracket[1];
+          sgTitle = sgBracket[2].trim();
+        } else if (sgIdOnly) {
+          sgId = sgIdOnly[1];
+          sgTitle = sgId;
+        } else {
+          // title만 있거나 빈 경우
+          sgId = 'SG_' + (model.subgraphs.length + 1);
+          sgTitle = sgRest || sgId;
+        }
+        var sg = { id: sgId, title: sgTitle, nodeIds: [] };
+        model.subgraphs.push(sg);
+        model._subgraphMap[sgId] = sg;
+        model._subgraphStack.push(sg);
+        continue;
+      }
+
+      // subgraph close
+      if (line === 'end') {
+        if (model._subgraphStack.length) model._subgraphStack.pop();
         continue;
       }
 
@@ -418,6 +448,16 @@
         pushRawTarget(model, line, i + 1, 'flow-line', sourceInfo);
         pushRawStatement(model, line);
       } else {
+        // 현재 subgraph 안에 있으면 선언된 노드를 subgraph에 등록
+        if (model._subgraphStack.length) {
+          var currentSg = model._subgraphStack[model._subgraphStack.length - 1];
+          var stmtNodeIds = statement.nodeIds || [];
+          for (var ni = 0; ni < stmtNodeIds.length; ni++) {
+            if (currentSg.nodeIds.indexOf(stmtNodeIds[ni]) === -1) {
+              currentSg.nodeIds.push(stmtNodeIds[ni]);
+            }
+          }
+        }
         model.statements.push(statement);
       }
     }
@@ -431,6 +471,8 @@
     delete model._edgeRefCounts;
     delete model._sourceTextCounts;
     delete model._diagnostics;
+    delete model._subgraphStack;
+    delete model._subgraphMap;
 
     return model;
   }

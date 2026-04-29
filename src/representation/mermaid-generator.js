@@ -156,6 +156,39 @@
     return parts.join(' ');
   }
 
+  function buildSubgraphNodeMap(subgraphs) {
+    var map = {};
+    if (!subgraphs) return map;
+    for (var i = 0; i < subgraphs.length; i++) {
+      var sg = subgraphs[i];
+      for (var j = 0; j < sg.nodeIds.length; j++) {
+        map[sg.nodeIds[j]] = sg.id;
+      }
+    }
+    return map;
+  }
+
+  function generateSubgraphs(model, lines, usedNodes) {
+    var subgraphs = model.subgraphs || [];
+    if (!subgraphs.length) return;
+    for (var i = 0; i < subgraphs.length; i++) {
+      var sg = subgraphs[i];
+      var header = sg.title && sg.title !== sg.id
+        ? 'subgraph ' + sg.id + ' [' + sg.title + ']'
+        : 'subgraph ' + sg.id;
+      lines.push('    ' + header);
+      for (var j = 0; j < sg.nodeIds.length; j++) {
+        var nid = sg.nodeIds[j];
+        var node = findNode(model.nodes, nid);
+        if (node) {
+          lines.push('        ' + generateNode(node));
+          usedNodes[nid] = true;
+        }
+      }
+      lines.push('    end');
+    }
+  }
+
   function generateMermaid(model) {
     if (!model) return '';
     if (model.type === 'sequenceDiagram' && global.SequenceGenerator) {
@@ -166,11 +199,17 @@
     var direction = model.direction || 'TD';
     lines.push('flowchart ' + direction);
 
+    var usedNodes = {};
+    var usedEdges = {};
+    var subgraphs = model.subgraphs || [];
+
+    // subgraph 블록을 먼저 출력하고, 소속 노드를 usedNodes에 기록한다.
+    if (subgraphs.length) {
+      generateSubgraphs(model, lines, usedNodes);
+    }
+
     var statements = model.statements || [];
     if (statements.length) {
-      var usedNodes = {};
-      var usedEdges = {};
-
       for (var s = 0; s < statements.length; s++) {
         var statement = statements[s];
         var line = '';
@@ -225,6 +264,7 @@
 
     if (model.nodes && model.nodes.length > 0) {
       for (var i = 0; i < model.nodes.length; i++) {
+        if (usedNodes[model.nodes[i].id]) continue;
         lines.push('    ' + generateNode(model.nodes[i]));
       }
     }

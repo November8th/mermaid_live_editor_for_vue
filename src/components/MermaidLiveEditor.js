@@ -310,6 +310,9 @@ Vue.component('mermaid-live-editor', {
             @add-edge="addEdge"\
             @add-sequence-message="addSequenceMessage"\
             @delete-selected="deleteSelected"\
+            @wrap-nodes-in-subgraph="wrapNodesInSubgraph"\
+            @update-subgraph-title="updateSubgraphTitle"\
+            @remove-subgraph="removeSubgraph"\
             @update-node-text="updateNodeText"\
             @update-node-shape="updateNodeShape"\
             @update-edge-text="updateEdgeText"\
