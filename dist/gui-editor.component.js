@@ -1,6 +1,6 @@
 /**
  * gui-editor.component.js
- * Built: 2026-04-30T06:24:09.418Z
+ * Built: 2026-04-30T06:50:13.117Z
  *
  * Concatenation of gui-editor source files (no minification).
  * Requires global Vue 2 and Mermaid loaded separately.
@@ -8456,27 +8456,50 @@ Vue.component('mermaid-full-editor', {
     // hide-editor 모드에서 Bootstrap 모달 등 display:none 컨테이너 안에 마운트될 때
     // getBBox/getBoundingClientRect가 0을 반환한 채로 postRenderSetup이 실행되어
     // 핸들러 좌표 맵핑이 깨지는 문제를 방지한다.
-    // 컨테이너가 0 크기 → 유효 크기로 전환되는 순간(최초 1회) renderDiagram을 재실행해
+    // 컨테이너가 hidden → visible로 전환되는 순간(최초 1회) renderDiagram을 재실행해
     // 올바른 좌표로 postRenderSetup이 다시 붙도록 한다.
+    //
+    // IntersectionObserver를 우선 사용한다. ResizeObserver는 display:none ancestor 해제를
+    // 일부 환경에서 감지하지 못하는 반면, IntersectionObserver는 이 케이스를 안정적으로 잡는다.
     _attachResizeObserver: function () {
-      if (typeof ResizeObserver === 'undefined') return;
       var self = this;
       var previewPane = this.$el && this.$el.querySelector('.gui-editor-shell__preview-pane');
       if (!previewPane) return;
-      var initialized = false;
-      this._resizeObserver = new ResizeObserver(function (entries) {
-        for (var i = 0; i < entries.length; i++) {
-          var rect = entries[i].contentRect;
-          if (!initialized && rect.width > 0 && rect.height > 0) {
-            initialized = true;
-            if (self.$refs.preview) {
-              self.$refs.preview.scheduleFit();
-              self.$refs.preview.renderDiagram();
-            }
-          }
+
+      // 이미 visible이면 초기 render에서 getBBox가 정상 동작했으므로 observer 불필요
+      var initRect = previewPane.getBoundingClientRect();
+      if (initRect.width > 0 && initRect.height > 0) return;
+
+      var triggered = false;
+      var trigger = function () {
+        if (triggered) return;
+        triggered = true;
+        if (self._resizeObserver) {
+          self._resizeObserver.disconnect();
+          self._resizeObserver = null;
         }
-      });
-      this._resizeObserver.observe(previewPane);
+        if (self.$refs.preview) {
+          self.$refs.preview.scheduleFit();
+          self.$refs.preview.renderDiagram();
+        }
+      };
+
+      if (typeof IntersectionObserver !== 'undefined') {
+        this._resizeObserver = new IntersectionObserver(function (entries) {
+          if (entries[0].isIntersecting) trigger();
+        }, { threshold: 0 });
+        this._resizeObserver.observe(previewPane);
+        return;
+      }
+
+      // Fallback: ResizeObserver (IntersectionObserver 미지원 환경)
+      if (typeof ResizeObserver !== 'undefined') {
+        this._resizeObserver = new ResizeObserver(function (entries) {
+          var rect = entries[0].contentRect;
+          if (rect.width > 0 && rect.height > 0) trigger();
+        });
+        this._resizeObserver.observe(previewPane);
+      }
     },
 
     // ── 텍스트 에디터에서 편집 ──────────────────────────────────────
