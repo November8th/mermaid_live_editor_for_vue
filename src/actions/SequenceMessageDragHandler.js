@@ -1,6 +1,8 @@
 (function (global) {
   'use strict';
 
+  var HANDLE_OFFSET_Y = 8;
+
   var SequenceMessageDragHandler = {
     _overlay: null,
     _dragLine: null,
@@ -81,6 +83,9 @@
       zone.setAttribute('y', participant.lifelineTopY);
       zone.setAttribute('width', '32');
       zone.setAttribute('height', Math.max(40, participant.lifelineBottomY - participant.lifelineTopY));
+      zone.setAttribute('fill', '#000');
+      zone.setAttribute('fill-opacity', '0.001');
+      zone.setAttribute('stroke', 'none');
       zone.style.pointerEvents = 'all';
       zone.style.cursor = 'crosshair';
       this._overlay.appendChild(zone);
@@ -104,7 +109,7 @@
 
     _addHandle: function (svgEl, participant, slot, participantMap, ctx) {
       var x = participant.cx;
-      var y = slot.y;
+      var y = slot.y + HANDLE_OFFSET_Y;
       var self = this;
 
       var hit = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
@@ -112,6 +117,9 @@
       hit.setAttribute('cx', x);
       hit.setAttribute('cy', y);
       hit.setAttribute('r', '18');
+      hit.setAttribute('fill', '#000');
+      hit.setAttribute('fill-opacity', '0.001');
+      hit.setAttribute('stroke', 'none');
       hit.style.pointerEvents = 'all';
       hit.style.cursor = 'crosshair';
       this._overlay.appendChild(hit);
@@ -121,14 +129,21 @@
       circle.setAttribute('cx', x);
       circle.setAttribute('cy', y);
       circle.setAttribute('r', '12');
+      circle.setAttribute('fill', '#1565c0');
+      circle.setAttribute('stroke', '#fff');
+      circle.setAttribute('stroke-width', '2');
       circle.style.pointerEvents = 'none';
       this._overlay.appendChild(circle);
 
       var plus = document.createElementNS('http://www.w3.org/2000/svg', 'text');
       plus.setAttribute('class', 'sequence-plus-label');
       plus.setAttribute('x', x);
-      plus.setAttribute('y', y + 4);
+      plus.setAttribute('y', y + 1.5);
       plus.setAttribute('text-anchor', 'middle');
+      plus.setAttribute('dominant-baseline', 'middle');
+      plus.setAttribute('fill', '#fff');
+      plus.setAttribute('font-size', '20');
+      plus.setAttribute('font-weight', '700');
       plus.style.pointerEvents = 'none';
       plus.textContent = '+';
       this._overlay.appendChild(plus);
@@ -136,7 +151,48 @@
       hit.addEventListener('mousedown', function (e) {
         e.preventDefault();
         e.stopPropagation();
-        self._startDrag(svgEl, participant.id, x, y, slot.insertIndex, participantMap, ctx);
+        var startX = e.clientX, startY = e.clientY;
+        var didDrag = false;
+
+        var onMove = function (me) {
+          var dx = me.clientX - startX, dy = me.clientY - startY;
+          if (!didDrag && (dx * dx + dy * dy) > 25) {
+            didDrag = true;
+            document.removeEventListener('mousemove', onMove);
+            document.removeEventListener('mouseup', onUp);
+            self._startDrag(svgEl, participant.id, x, y, slot.insertIndex, participantMap, ctx);
+          }
+        };
+
+        var onUp = function () {
+          document.removeEventListener('mousemove', onMove);
+          document.removeEventListener('mouseup', onUp);
+          if (!didDrag) {
+            var screen = SvgPositionTracker.svgToScreen(svgEl, x, y);
+            ctx.setState({
+              selectedSequenceParticipantId: null,
+              selectedSequenceMessageIndex: null,
+              selectedSequenceMessageIndices: [],
+              selectedSequenceBlockId: null,
+              sequenceToolbar: {
+                type: 'insert',
+                participantId: participant.id,
+                insertIndex: slot.insertIndex,
+                x: screen ? screen.x : e.clientX,
+                y: screen ? screen.y : e.clientY
+              }
+            });
+          }
+        };
+
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+      });
+
+      // mouseup 후 발생하는 click 이 document._clickCloseHandler 까지 버블링해서
+      // sequenceToolbar 를 즉시 null 로 만드는 문제를 막는다
+      hit.addEventListener('click', function (e) {
+        e.stopPropagation();
       });
 
       this._handles.push(hit, circle, plus);
@@ -146,6 +202,7 @@
       var self = this;
       this._bringOverlayToFront(svgEl);
       this._dragging = true;
+      ctx.setState({ portDragging: true });
       this.clearHandles();
 
       this._dragLine.setAttribute('x1', startX);
@@ -155,9 +212,12 @@
       this._dragLine.style.display = '';
 
       var currentTarget = null;
+      var pointerClientX = 0;
+      var pointerClientY = 0;
+      var autoPanFrame = null;
 
-      var onMove = function (me) {
-        var svgPt = SvgPositionTracker.getSVGPoint(svgEl, me.clientX, me.clientY);
+      var updateDragAtClient = function (clientX, clientY) {
+        var svgPt = SvgPositionTracker.getSVGPoint(svgEl, clientX, clientY);
         self._dragLine.setAttribute('x2', svgPt.x);
         self._dragLine.setAttribute('y2', startY);
 
@@ -169,12 +229,78 @@
         }
       };
 
+      var getAutoPanDelta = function (clientX, clientY) {
+        var rect = ctx.getPreviewRect ? ctx.getPreviewRect() : null;
+        var threshold = 56;
+        var maxStep = 8;
+        var dx = 0;
+        var dy = 0;
+        var progress = 0;
+
+        if (!rect) return { dx: 0, dy: 0 };
+
+        if (clientX <= rect.left + threshold) {
+          progress = Math.min(1, (rect.left + threshold - clientX) / threshold);
+          dx = Math.ceil(progress * maxStep);
+        } else if (clientX >= rect.right - threshold) {
+          progress = Math.min(1, (clientX - (rect.right - threshold)) / threshold);
+          dx = -Math.ceil(progress * maxStep);
+        }
+
+        if (clientY <= rect.top + threshold) {
+          progress = Math.min(1, (rect.top + threshold - clientY) / threshold);
+          dy = Math.ceil(progress * maxStep);
+        } else if (clientY >= rect.bottom - threshold) {
+          progress = Math.min(1, (clientY - (rect.bottom - threshold)) / threshold);
+          dy = -Math.ceil(progress * maxStep);
+        }
+
+        return { dx: dx, dy: dy };
+      };
+
+      var stopAutoPan = function () {
+        if (!autoPanFrame) return;
+        cancelAnimationFrame(autoPanFrame);
+        autoPanFrame = null;
+      };
+
+      var autoPanTick = function () {
+        autoPanFrame = null;
+        if (!ctx.getState().portDragging) return;
+
+        var delta = getAutoPanDelta(pointerClientX, pointerClientY);
+        if (!delta.dx && !delta.dy) return;
+
+        if (ctx.panPreviewBy) {
+          ctx.panPreviewBy(delta.dx, delta.dy);
+          updateDragAtClient(pointerClientX, pointerClientY);
+        }
+
+        autoPanFrame = requestAnimationFrame(autoPanTick);
+      };
+
+      var scheduleAutoPan = function () {
+        if (autoPanFrame) return;
+        var delta = getAutoPanDelta(pointerClientX, pointerClientY);
+        if (!delta.dx && !delta.dy) return;
+        autoPanFrame = requestAnimationFrame(autoPanTick);
+      };
+
+      var onMove = function (me) {
+        pointerClientX = me.clientX;
+        pointerClientY = me.clientY;
+        updateDragAtClient(pointerClientX, pointerClientY);
+        scheduleAutoPan();
+      };
+
       var onUp = function (me) {
         document.removeEventListener('mousemove', onMove);
         document.removeEventListener('mouseup', onUp);
+        stopAutoPan();
         self._dragLine.style.display = 'none';
         self._targetLine.style.display = 'none';
         self._dragging = false;
+        ctx.setState({ portDragging: false });
 
         if (currentTarget) self._clearTargetHighlight(participantMap[currentTarget]);
 
@@ -189,6 +315,10 @@
           });
         }
       };
+
+      var startScreenPt = SvgPositionTracker.svgToScreen(svgEl, startX, startY);
+      pointerClientX = startScreenPt.x;
+      pointerClientY = startScreenPt.y;
 
       document.addEventListener('mousemove', onMove);
       document.addEventListener('mouseup', onUp);

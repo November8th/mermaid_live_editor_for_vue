@@ -1,13 +1,10 @@
 (function (global) {
   'use strict';
 
-  function getMessageOperatorBase(operator) {
-    var suffix = '';
-    if (/[+-]$/.test(operator)) {
-      suffix = operator.slice(-1);
-      operator = operator.slice(0, -1);
-    }
-    return { base: operator || '->>', suffix: suffix };
+  function clamp(value, min, max) {
+    if (value < min) return min;
+    if (value > max) return max;
+    return value;
   }
 
   var SequenceSvgHandler = {
@@ -22,6 +19,7 @@
       SequenceMessageDragHandler.attach(svgEl, participantMap, insertSlots, ctx);
       SequenceSvgHandler._attachParticipants(participantTargets, svgEl, ctx);
       SequenceSvgHandler._attachMessages(messages, svgEl, ctx);
+      SequenceSvgHandler._attachNotes(svgEl, model, ctx);
     },
 
     _attachParticipants: function (participantTargets, svgEl, ctx) {
@@ -41,9 +39,12 @@
         ctx.setState({
           selectedSequenceParticipantId: data.id,
           selectedSequenceMessageIndex: null,
+          selectedSequenceMessageIndices: [],
+          selectedSequenceBlockId: null,
           sequenceToolbar: {
             type: 'participant',
             id: data.id,
+            kind: data.kind || 'participant',
             x: e.clientX,
             y: e.clientY
           }
@@ -81,6 +82,8 @@
         ctx.setState({
           selectedSequenceParticipantId: null,
           selectedSequenceMessageIndex: data.index,
+          selectedSequenceMessageIndices: [],
+          selectedSequenceBlockId: null,
           sequenceToolbar: {
             type: 'message',
             index: data.index,
@@ -115,6 +118,9 @@
       ctx.watchSequenceMessageSelection(data.index, visualEl, textEl);
       if (ctx.watchSequenceMessageHitSelection) {
         ctx.watchSequenceMessageHitSelection(data.index, hitEl);
+      }
+      if (ctx.watchSequenceMessageMultiSelection) {
+        ctx.watchSequenceMessageMultiSelection(data.index, visualEl, textEl, hitEl);
       }
     },
 
@@ -161,10 +167,23 @@
       }
     },
 
-    startParticipantEdit: function (participantId, participantEl, ctx) {
+    startParticipantEdit: function (participantId, screenPos, topBox, ctx) {
       var participant = ctx.findSequenceParticipant(participantId);
       if (!participant) return;
-      var rect = participantEl.getBoundingClientRect();
+      var boxW = topBox ? topBox.width : 120;
+      var width = Math.max(160, boxW + 28);
+      var centerX = screenPos ? screenPos.x : (global.innerWidth || 400) / 2;
+      var centerY = screenPos ? screenPos.y : (global.innerHeight || 300) / 2;
+      var left = clamp(
+        centerX - width / 2,
+        12,
+        Math.max(12, (global.innerWidth || 0) - width - 12)
+      );
+      var top = clamp(
+        centerY - 18,
+        12,
+        Math.max(12, (global.innerHeight || 0) - 48)
+      );
 
       ctx.setState({
         sequenceToolbar: null,
@@ -172,10 +191,10 @@
         editingSequenceParticipantText: participant.label || participant.id,
         sequenceParticipantEditStyle: {
           position: 'fixed',
-          left: (rect.left + rect.width / 2 - 90) + 'px',
-          top: (rect.top + rect.height / 2 - 18) + 'px',
+          left: left + 'px',
+          top: top + 'px',
           zIndex: 1000,
-          width: Math.max(160, rect.width + 28) + 'px'
+          width: width + 'px'
         }
       });
       ctx.focusSequenceParticipantInput();
@@ -184,29 +203,84 @@
     startMessageEdit: function (messageIndex, clientX, clientY, svgEl, ctx) {
       var message = ctx.findSequenceMessage(messageIndex);
       if (!message) return;
+      var width = 220;
+      var left = clamp(
+        clientX - width / 2,
+        12,
+        Math.max(12, (global.innerWidth || 0) - width - 12)
+      );
+      var top = clamp(
+        clientY - 22,
+        12,
+        Math.max(12, (global.innerHeight || 0) - 48)
+      );
       ctx.setState({
         sequenceToolbar: null,
         editingSequenceMessageIndex: messageIndex,
         editingSequenceMessageText: message.text || '',
         sequenceMessageEditStyle: {
           position: 'fixed',
-          left: (clientX - 110) + 'px',
-          top: (clientY - 22) + 'px',
+          left: left + 'px',
+          top: top + 'px',
           zIndex: 1000,
-          width: '220px'
+          width: width + 'px'
         }
       });
       ctx.focusSequenceMessageInput();
     },
 
+    _attachNotes: function (svgEl, model, ctx) {
+      var noteRects = Array.prototype.slice.call(svgEl.querySelectorAll('rect.note'));
+      var noteStatements = [];
+      var statements = (model && model.statements) || [];
+      for (var i = 0; i < statements.length; i++) {
+        if (statements[i] && statements[i].type === 'note') {
+          noteStatements.push({ statementIndex: i, statement: statements[i] });
+        }
+      }
+
+      var seenGroups = [], noteGroups = [];
+      for (var r = 0; r < noteRects.length; r++) {
+        var g = noteRects[r].parentNode;
+        if (g && seenGroups.indexOf(g) === -1) { seenGroups.push(g); noteGroups.push(g); }
+      }
+
+      for (var j = 0; j < Math.min(noteGroups.length, noteStatements.length); j++) {
+        (function (noteGroup, noteInfo) {
+          noteGroup.style.cursor = 'pointer';
+          noteGroup.style.pointerEvents = 'all';
+          noteGroup.addEventListener('click', function (e) {
+            e.stopPropagation();
+            e.preventDefault();
+            ctx.setState({
+              selectedSequenceNoteStatementIndex: noteInfo.statementIndex,
+              selectedSequenceParticipantId: null,
+              selectedSequenceMessageIndex: null,
+              selectedSequenceMessageIndices: [],
+              selectedSequenceBlockId: null,
+              sequenceToolbar: {
+                type: 'note',
+                noteStatementIndex: noteInfo.statementIndex,
+                text: noteInfo.statement.text || '',
+                x: e.clientX,
+                y: e.clientY
+              }
+            });
+          });
+          noteGroup.addEventListener('dblclick', function (e) {
+            e.stopPropagation();
+            e.preventDefault();
+            if (ctx.openSequenceNoteEdit) {
+              ctx.openSequenceNoteEdit(noteInfo.statementIndex, noteInfo.statement.text || '', e.clientX, e.clientY);
+            }
+          });
+        })(noteGroups[j], noteStatements[j]);
+      }
+    },
+
+    // solid(단일 dash) ↔ dotted(이중 dash) 토글
     toggleMessageLineType: function (message) {
-      var parts = getMessageOperatorBase(message.operator || '->>');
-      var nextBase = parts.base;
-      if (parts.base === '->>') nextBase = '-->>';
-      else if (parts.base === '-->>') nextBase = '->>';
-      else if (parts.base === '->') nextBase = '-->';
-      else if (parts.base === '-->') nextBase = '->';
-      return nextBase + parts.suffix;
+      return SequenceMessageCodec.toggleLineStyle(message.operator || SequenceMessageCodec.DEFAULT_OPERATOR);
     }
   };
 
