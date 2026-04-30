@@ -279,6 +279,10 @@ Vue.component('mermaid-preview', {
       document.removeEventListener('mouseup', this._panMouseUpHandler);
       this._panMouseUpHandler = null;
     }
+    if (this._visibilityObserver) {
+      this._visibilityObserver.disconnect();
+      this._visibilityObserver = null;
+    }
   },
 
   methods: {
@@ -378,6 +382,12 @@ Vue.component('mermaid-preview', {
         this._positions  = collected.positions;
         this._elements   = collected.elements;
         this._edgePaths  = SvgPositionTracker.collectEdgePaths(svgEl, this.model.edges);
+
+        // display:none 컨테이너 안에서 렌더되면 getBBox()가 0을 반환해
+        // 모든 노드의 width가 0이 된다. 이 경우 visible 전환 시 자동 재렌더.
+        if (this._allPositionsZero(collected.positions)) {
+          this._scheduleRerenderWhenVisible();
+        }
 
         // 하위 핸들러에 넘길 bridge 객체 구성
         var ctx = this._buildCtx(svgEl);
@@ -726,6 +736,31 @@ Vue.component('mermaid-preview', {
       this.panY    = cy - (cy - this.panY) * ratio;
       this.cfgZoom = newZoom;
       this._applyTransform();
+    },
+
+    _allPositionsZero: function (positions) {
+      var ids = Object.keys(positions);
+      if (!ids.length) return false;
+      for (var i = 0; i < ids.length; i++) {
+        if (positions[ids[i]].width > 0) return false;
+      }
+      return true;
+    },
+
+    _scheduleRerenderWhenVisible: function () {
+      if (this._visibilityObserver) return;
+      var self = this;
+      var el = this.$el;
+      if (!el || typeof IntersectionObserver === 'undefined') return;
+      this._visibilityObserver = new IntersectionObserver(function (entries) {
+        if (entries[0].isIntersecting) {
+          self._visibilityObserver.disconnect();
+          self._visibilityObserver = null;
+          self.scheduleFit();
+          self.renderDiagram();
+        }
+      }, { threshold: 0 });
+      this._visibilityObserver.observe(el);
     },
 
     _buildCtx: function (svgEl) {

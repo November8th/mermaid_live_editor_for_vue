@@ -1,6 +1,6 @@
 /**
  * gui-editor.component.js
- * Built: 2026-04-30T06:50:13.117Z
+ * Built: 2026-04-30T07:03:52.881Z
  *
  * Concatenation of gui-editor source files (no minification).
  * Requires global Vue 2 and Mermaid loaded separately.
@@ -6810,6 +6810,10 @@ Vue.component('mermaid-preview', {
       document.removeEventListener('mouseup', this._panMouseUpHandler);
       this._panMouseUpHandler = null;
     }
+    if (this._visibilityObserver) {
+      this._visibilityObserver.disconnect();
+      this._visibilityObserver = null;
+    }
   },
 
   methods: {
@@ -6909,6 +6913,12 @@ Vue.component('mermaid-preview', {
         this._positions  = collected.positions;
         this._elements   = collected.elements;
         this._edgePaths  = SvgPositionTracker.collectEdgePaths(svgEl, this.model.edges);
+
+        // display:none 컨테이너 안에서 렌더되면 getBBox()가 0을 반환해
+        // 모든 노드의 width가 0이 된다. 이 경우 visible 전환 시 자동 재렌더.
+        if (this._allPositionsZero(collected.positions)) {
+          this._scheduleRerenderWhenVisible();
+        }
 
         // 하위 핸들러에 넘길 bridge 객체 구성
         var ctx = this._buildCtx(svgEl);
@@ -7257,6 +7267,31 @@ Vue.component('mermaid-preview', {
       this.panY    = cy - (cy - this.panY) * ratio;
       this.cfgZoom = newZoom;
       this._applyTransform();
+    },
+
+    _allPositionsZero: function (positions) {
+      var ids = Object.keys(positions);
+      if (!ids.length) return false;
+      for (var i = 0; i < ids.length; i++) {
+        if (positions[ids[i]].width > 0) return false;
+      }
+      return true;
+    },
+
+    _scheduleRerenderWhenVisible: function () {
+      if (this._visibilityObserver) return;
+      var self = this;
+      var el = this.$el;
+      if (!el || typeof IntersectionObserver === 'undefined') return;
+      this._visibilityObserver = new IntersectionObserver(function (entries) {
+        if (entries[0].isIntersecting) {
+          self._visibilityObserver.disconnect();
+          self._visibilityObserver = null;
+          self.scheduleFit();
+          self.renderDiagram();
+        }
+      }, { threshold: 0 });
+      this._visibilityObserver.observe(el);
     },
 
     _buildCtx: function (svgEl) {
@@ -8435,9 +8470,6 @@ Vue.component('mermaid-full-editor', {
     var self = this;
     this.$nextTick(function () {
       self._seedIdAllocators();
-      if (self.hideEditor) {
-        self._attachResizeObserver();
-      }
     });
     window.addEventListener('popstate', this._onPopState);
   },
@@ -8445,62 +8477,9 @@ Vue.component('mermaid-full-editor', {
   beforeDestroy: function () {
     window.removeEventListener('popstate', this._onPopState);
     if (this.fullScreen) history.back();
-    if (this._resizeObserver) {
-      this._resizeObserver.disconnect();
-      this._resizeObserver = null;
-    }
   },
 
   methods: {
-
-    // hide-editor 모드에서 Bootstrap 모달 등 display:none 컨테이너 안에 마운트될 때
-    // getBBox/getBoundingClientRect가 0을 반환한 채로 postRenderSetup이 실행되어
-    // 핸들러 좌표 맵핑이 깨지는 문제를 방지한다.
-    // 컨테이너가 hidden → visible로 전환되는 순간(최초 1회) renderDiagram을 재실행해
-    // 올바른 좌표로 postRenderSetup이 다시 붙도록 한다.
-    //
-    // IntersectionObserver를 우선 사용한다. ResizeObserver는 display:none ancestor 해제를
-    // 일부 환경에서 감지하지 못하는 반면, IntersectionObserver는 이 케이스를 안정적으로 잡는다.
-    _attachResizeObserver: function () {
-      var self = this;
-      var previewPane = this.$el && this.$el.querySelector('.gui-editor-shell__preview-pane');
-      if (!previewPane) return;
-
-      // 이미 visible이면 초기 render에서 getBBox가 정상 동작했으므로 observer 불필요
-      var initRect = previewPane.getBoundingClientRect();
-      if (initRect.width > 0 && initRect.height > 0) return;
-
-      var triggered = false;
-      var trigger = function () {
-        if (triggered) return;
-        triggered = true;
-        if (self._resizeObserver) {
-          self._resizeObserver.disconnect();
-          self._resizeObserver = null;
-        }
-        if (self.$refs.preview) {
-          self.$refs.preview.scheduleFit();
-          self.$refs.preview.renderDiagram();
-        }
-      };
-
-      if (typeof IntersectionObserver !== 'undefined') {
-        this._resizeObserver = new IntersectionObserver(function (entries) {
-          if (entries[0].isIntersecting) trigger();
-        }, { threshold: 0 });
-        this._resizeObserver.observe(previewPane);
-        return;
-      }
-
-      // Fallback: ResizeObserver (IntersectionObserver 미지원 환경)
-      if (typeof ResizeObserver !== 'undefined') {
-        this._resizeObserver = new ResizeObserver(function (entries) {
-          var rect = entries[0].contentRect;
-          if (rect.width > 0 && rect.height > 0) trigger();
-        });
-        this._resizeObserver.observe(previewPane);
-      }
-    },
 
     // ── 텍스트 에디터에서 편집 ──────────────────────────────────────
     onScriptChange: function (newScript) {
