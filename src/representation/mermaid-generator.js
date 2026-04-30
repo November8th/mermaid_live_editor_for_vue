@@ -90,8 +90,11 @@
 
     if (!text || !text.trim()) return type;
 
-    // Flowchart edge labels are serialized as operator|label| so the
-    // parser can keep the operator itself in edge.type.
+    // 일반 화살표(-->)만 대시 스타일, 나머지는 파이프 스타일
+    if (type === '-->') {
+      return '-- ' + text.trim() + ' -->';
+    }
+
     return type + '|' + escapeEdgeLabel(text) + '|';
   }
 

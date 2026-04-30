@@ -1,6 +1,6 @@
 /**
  * gui-editor.component.js
- * Built: 2026-04-30T04:36:38.964Z
+ * Built: 2026-04-30T05:15:19.841Z
  *
  * Concatenation of gui-editor source files (no minification).
  * Requires global Vue 2 and Mermaid loaded separately.
@@ -1928,8 +1928,11 @@
 
     if (!text || !text.trim()) return type;
 
-    // Flowchart edge labels are serialized as operator|label| so the
-    // parser can keep the operator itself in edge.type.
+    // 일반 화살표(-->)만 대시 스타일, 나머지는 파이프 스타일
+    if (type === '-->') {
+      return '-- ' + text.trim() + ' -->';
+    }
+
     return type + '|' + escapeEdgeLabel(text) + '|';
   }
 
