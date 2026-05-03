@@ -50,6 +50,7 @@ Vue.component('mermaid-full-editor', {
       if (newVal !== this.script) {
         this.script = newVal;
         this.parseScript();
+        if (this.history) this.history.clear();
       }
     },
     // 컴포넌트 → 부모 동기화

@@ -1,6 +1,6 @@
 /**
  * gui-editor.component.js
- * Built: 2026-04-30T07:03:52.881Z
+ * Built: 2026-05-03T23:20:20.138Z
  *
  * Concatenation of gui-editor source files (no minification).
  * Requires global Vue 2 and Mermaid loaded separately.
@@ -8448,6 +8448,7 @@ Vue.component('mermaid-full-editor', {
       if (newVal !== this.script) {
         this.script = newVal;
         this.parseScript();
+        if (this.history) this.history.clear();
       }
     },
     // 컴포넌트 → 부모 동기화
