@@ -150,7 +150,12 @@
         if (textEl) textEl.classList.add('sequence-message-text-hovered');
         if (!data.bbox) return;
         sharedHideNow();
-        var cx = data.bbox.x + data.bbox.width / 2 - 24;
+        // from participant lifeline cx에서 메시지 방향으로 살짝 앞에 배치
+        var fromEntry = msgFromId && participantMap && participantMap[msgFromId];
+        var bboxCx = data.bbox.x + data.bbox.width / 2;
+        var cx = fromEntry
+          ? fromEntry.cx + (fromEntry.cx < bboxCx ? 28 : -28)
+          : (data.bbox.x + 20);
         shared.btns = SequenceSvgHandler._createNoteInsertButtons(
           msgOverlay, data.bbox, msgStmtIndex, msgFromId,
           svgEl, model, participantMap, ctx,
