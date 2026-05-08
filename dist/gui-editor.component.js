@@ -1,6 +1,6 @@
 /**
  * gui-editor.component.js
- * Built: 2026-05-08T05:35:27.149Z
+ * Built: 2026-05-08T06:12:58.247Z
  *
  * Concatenation of gui-editor source files (no minification).
  * Requires global Vue 2 and Mermaid loaded separately.
@@ -5278,9 +5278,10 @@
       if (!this._overlay) this.initOverlay(svgEl);
       this._bringOverlayToFront(svgEl);
 
+      var participantMap = SequencePositionTracker.collectParticipants(svgEl, model);
       var messages = SequencePositionTracker.collectMessages(svgEl, model);
       var notes    = SequencePositionTracker.collectNotePositions(svgEl, model);
-      this._renderBlockBadges(svgEl, model, ctx);
+      this._renderBlockBadges(svgEl, model, participantMap, ctx);
       this._attachSelection(svgEl, messages, notes, ctx, canvas);
 
       if (ctx.watchSequenceSelectionHighlight) {
@@ -5438,13 +5439,36 @@
       this._selectionRect.setAttribute('height', height);
     },
 
-    _renderBlockBadges: function (svgEl, model, ctx) {
+    _renderBlockBadges: function (svgEl, model, participantMap, ctx) {
       var blocks = SequenceStatementUtils.listBlocks(model && model.statements);
       var labelTextEls = this._sortTextElementsByPosition(Array.prototype.slice.call(svgEl.querySelectorAll('.labelText')));
       var allLoopTextEls = this._sortTextElementsByPosition(Array.prototype.slice.call(svgEl.querySelectorAll('.loopText')));
       var usedLoopIndices = {};
       var stmts = model && model.statements;
       var blockBindings = [];
+
+      // block title + 버튼용 overlay 및 공유 hover 상태
+      var oldBtnOverlay = svgEl.querySelector('#sequence-block-insert-overlay');
+      if (oldBtnOverlay) oldBtnOverlay.remove();
+      var btnOverlay = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+      btnOverlay.setAttribute('id', 'sequence-block-insert-overlay');
+      svgEl.appendChild(btnOverlay);
+
+      var shared = { btns: null, hideTimer: null };
+      function sharedCancelHide() {
+        if (shared.hideTimer !== null) { clearTimeout(shared.hideTimer); shared.hideTimer = null; }
+      }
+      function sharedHideNow() {
+        sharedCancelHide();
+        if (shared.btns) {
+          for (var k = 0; k < shared.btns.length; k++) shared.btns[k].remove();
+          shared.btns = null;
+        }
+      }
+      function sharedScheduleHide() {
+        sharedCancelHide();
+        shared.hideTimer = setTimeout(function () { sharedHideNow(); }, 500);
+      }
 
       // 1차: 모든 block의 메인 title(loop/alt/opt/par text)을 먼저 예약한다.
       // nested loop title이 outer alt의 branch title로 잘못 소비되지 않도록 한다.
@@ -5478,7 +5502,14 @@
           binding.mainTitleEl,
           branchTitleEls,
           branchStatements,
-          ctx
+          ctx,
+          model,
+          participantMap,
+          btnOverlay,
+          shared,
+          sharedCancelHide,
+          sharedHideNow,
+          sharedScheduleHide
         );
       }
 
@@ -5563,7 +5594,7 @@
       return null;
     },
 
-    _attachBlockElementInteractions: function (svgEl, block, labelEl, titleEl, branchTitleEls, branchStatements, ctx) {
+    _attachBlockElementInteractions: function (svgEl, block, labelEl, titleEl, branchTitleEls, branchStatements, ctx, model, participantMap, btnOverlay, shared, sharedCancelHide, sharedHideNow, sharedScheduleHide) {
       // labelText의 부모 그룹(labelBox rect 포함)을 클릭 → toolbar
       var labelGroup = labelEl && (labelEl.closest ? labelEl.closest('g') : labelEl.parentNode);
       if (labelGroup) {
@@ -5592,11 +5623,12 @@
         }
       }
 
-      // 메인 title(loopText) 클릭 → 컨텍스트 툴바 (Edit / Delete)
+      // 메인 title(loopText) 클릭 → 컨텍스트 툴바 (Edit / Delete) + hover → + 버튼
       if (titleEl) {
         titleEl.style.cursor = 'pointer';
         titleEl.style.pointerEvents = 'all';
-        titleEl.addEventListener('click', function (e) {
+
+        var onTitleClick = function (e) {
           e.stopPropagation();
           if (ctx.setState) {
             ctx.setState({
@@ -5614,7 +5646,63 @@
               }
             });
           }
-        });
+        };
+        titleEl.addEventListener('click', onTitleClick);
+
+        // 투명 hit rect로 클릭/hover 영역 확장
+        var hitRect = null;
+        if (btnOverlay) {
+          try {
+            var titleBbox = titleEl.getBBox ? titleEl.getBBox() : null;
+            if (titleBbox && titleBbox.width) {
+              var PAD = 14;
+              hitRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+              hitRect.setAttribute('x', titleBbox.x - PAD);
+              hitRect.setAttribute('y', titleBbox.y - PAD);
+              hitRect.setAttribute('width', titleBbox.width + PAD * 2);
+              hitRect.setAttribute('height', titleBbox.height + PAD * 2);
+              hitRect.setAttribute('fill', 'transparent');
+              hitRect.setAttribute('rx', '4');
+              hitRect.style.pointerEvents = 'all';
+              hitRect.style.cursor = 'pointer';
+              btnOverlay.appendChild(hitRect);
+              hitRect.addEventListener('click', onTitleClick);
+            }
+          } catch (e3) {}
+        }
+
+        if (btnOverlay && participantMap && SequenceSvgHandler) {
+          var onTitleEnter = function () {
+            var bbox;
+            try { bbox = titleEl.getBBox ? titleEl.getBBox() : null; } catch (e2) {}
+            if (!bbox || !bbox.width) return;
+            sharedHideNow();
+
+            // participant마다 + 버튼 하나씩, 각자의 lifeline cx에 배치
+            var allBtns = [];
+            var positions = [{ y: bbox.y + bbox.height + 12, isBefore: false }];
+            var ids = Object.keys(participantMap);
+            for (var pi = 0; pi < ids.length; pi++) {
+              var p = participantMap[ids[pi]];
+              if (!p) continue;
+              var btns = SequenceSvgHandler._createNoteInsertButtons(
+                btnOverlay, bbox, block.statementIndex, ids[pi],
+                svgEl, model, participantMap, ctx,
+                sharedCancelHide, sharedScheduleHide, p.cx, positions
+              );
+              for (var bi = 0; bi < btns.length; bi++) allBtns.push(btns[bi]);
+            }
+            shared.btns = allBtns;
+          };
+          titleEl.addEventListener('mouseenter', onTitleEnter);
+          titleEl.addEventListener('mouseleave', sharedScheduleHide);
+
+          // hit rect에도 동일한 이벤트 연결
+          if (hitRect) {
+            hitRect.addEventListener('mouseenter', onTitleEnter);
+            hitRect.addEventListener('mouseleave', sharedScheduleHide);
+          }
+        }
       }
 
       // 분기 title(loopText) 클릭 → 컨텍스트 툴바 (Edit / Delete)
@@ -6035,10 +6123,10 @@
       }
     },
 
-    _createNoteInsertButtons: function (overlay, bbox, statementIndex, participantId, svgEl, model, participantMap, ctx, onEnter, onLeave, cxOverride) {
+    _createNoteInsertButtons: function (overlay, bbox, statementIndex, participantId, svgEl, model, participantMap, ctx, onEnter, onLeave, cxOverride, positionsOverride) {
       var elements = [];
       var cx = (cxOverride !== undefined && cxOverride !== null) ? cxOverride : (bbox.x + bbox.width / 2 + 28);
-      var positions = [
+      var positions = positionsOverride || [
         { y: bbox.y - 12, isBefore: true },
         { y: bbox.y + bbox.height + 12, isBefore: false }
       ];

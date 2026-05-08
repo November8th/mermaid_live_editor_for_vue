@@ -374,10 +374,10 @@
       }
     },
 
-    _createNoteInsertButtons: function (overlay, bbox, statementIndex, participantId, svgEl, model, participantMap, ctx, onEnter, onLeave, cxOverride) {
+    _createNoteInsertButtons: function (overlay, bbox, statementIndex, participantId, svgEl, model, participantMap, ctx, onEnter, onLeave, cxOverride, positionsOverride) {
       var elements = [];
       var cx = (cxOverride !== undefined && cxOverride !== null) ? cxOverride : (bbox.x + bbox.width / 2 + 28);
-      var positions = [
+      var positions = positionsOverride || [
         { y: bbox.y - 12, isBefore: true },
         { y: bbox.y + bbox.height + 12, isBefore: false }
       ];
