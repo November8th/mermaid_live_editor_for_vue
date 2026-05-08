@@ -1,6 +1,6 @@
 /**
  * gui-editor.component.js
- * Built: 2026-05-08T05:07:44.831Z
+ * Built: 2026-05-08T05:18:00.154Z
  *
  * Concatenation of gui-editor source files (no minification).
  * Requires global Vue 2 and Mermaid loaded separately.
@@ -5913,6 +5913,29 @@
       noteOverlay.setAttribute('id', 'sequence-note-insert-overlay');
       svgEl.appendChild(noteOverlay);
 
+      // 동시에 하나의 note + 버튼만 표시되도록 공유 상태 사용
+      var shared = { btns: null, hideTimer: null };
+
+      function sharedCancelHide() {
+        if (shared.hideTimer !== null) { clearTimeout(shared.hideTimer); shared.hideTimer = null; }
+      }
+
+      function sharedHideNow() {
+        sharedCancelHide();
+        if (shared.btns) {
+          for (var k = 0; k < shared.btns.length; k++) shared.btns[k].remove();
+          shared.btns = null;
+        }
+        if (svgEl.dataset) delete svgEl.dataset.noteHoverActive;
+      }
+
+      function sharedScheduleHide() {
+        sharedCancelHide();
+        shared.hideTimer = setTimeout(function () {
+          sharedHideNow();
+        }, 150);
+      }
+
       for (var j = 0; j < Math.min(noteGroups.length, noteStatements.length); j++) {
         (function (noteGroup, noteInfo) {
           noteGroup.style.cursor = 'pointer';
@@ -5943,38 +5966,19 @@
             }
           });
 
-          // hover → + 버튼 표시
-          var btns = null;
-          var hideTimer = null;
-
-          function cancelHide() {
-            if (hideTimer !== null) { clearTimeout(hideTimer); hideTimer = null; }
-          }
-
-          function scheduleHide() {
-            cancelHide();
-            hideTimer = setTimeout(function () {
-              if (btns) {
-                for (var k = 0; k < btns.length; k++) btns[k].remove();
-                btns = null;
-              }
-              if (svgEl.dataset) delete svgEl.dataset.noteHoverActive;
-              hideTimer = null;
-            }, 120);
-          }
-
           noteGroup.addEventListener('mouseenter', function () {
-            cancelHide();
+            // 다른 note의 버튼을 즉시 제거하고 이 note의 버튼을 표시
+            sharedHideNow();
             if (svgEl.dataset) svgEl.dataset.noteHoverActive = '1';
-            if (btns) return;
             var bbox;
             try { bbox = noteGroup.getBBox(); } catch (e) { return; }
             var participantId = noteInfo.statement.participants && noteInfo.statement.participants[0];
-            btns = SequenceSvgHandler._createNoteInsertButtons(
-              noteOverlay, bbox, noteInfo.statementIndex, participantId, svgEl, model, participantMap, ctx, cancelHide, scheduleHide
+            shared.btns = SequenceSvgHandler._createNoteInsertButtons(
+              noteOverlay, bbox, noteInfo.statementIndex, participantId, svgEl, model, participantMap, ctx,
+              sharedCancelHide, sharedScheduleHide
             );
           });
-          noteGroup.addEventListener('mouseleave', scheduleHide);
+          noteGroup.addEventListener('mouseleave', sharedScheduleHide);
 
           if (ctx.watchSequenceNoteMultiSelection) {
             ctx.watchSequenceNoteMultiSelection(noteInfo.statementIndex, noteGroup);
