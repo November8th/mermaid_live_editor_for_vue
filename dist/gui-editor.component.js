@@ -1,6 +1,6 @@
 /**
  * gui-editor.component.js
- * Built: 2026-05-08T03:03:33.995Z
+ * Built: 2026-05-08T05:07:44.831Z
  *
  * Concatenation of gui-editor source files (no minification).
  * Requires global Vue 2 and Mermaid loaded separately.
@@ -1217,6 +1217,11 @@
         if (statement && statement.type === 'message') {
           line = renderStatement(statement, messages[messageCursor] || statement.message, level);
           messageCursor++;
+        } else if (statement && (statement.type === 'activate' || statement.type === 'deactivate') &&
+                   statement.participant && !referenced[statement.participant]) {
+          // activate/deactivate on a participant with no messages causes Mermaid to crash
+          // (no lifeline y-extent), so skip these orphan statements.
+          line = '';
         } else {
           line = renderStatement(statement, null, level);
         }
