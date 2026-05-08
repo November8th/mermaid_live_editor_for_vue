@@ -279,8 +279,17 @@
       }
 
       // 2차: 메인 title을 제외한 나머지 loopText만 branch title에 순서대로 연결한다.
-      for (var j = 0; j < blockBindings.length; j++) {
-        var binding = blockBindings[j];
+      // SVG의 loopText는 깊이 우선(안쪽 블록 branch label이 먼저)으로 렌더되므로
+      // 가장 깊은 블록부터 처리해야 Y-order 소비 순서가 맞는다.
+      var sortedBindings = blockBindings.slice().sort(function (a, b) {
+        var da = a.block.depth !== undefined ? a.block.depth : 0;
+        var db = b.block.depth !== undefined ? b.block.depth : 0;
+        if (db !== da) return db - da; // 깊은 것 먼저
+        return a.block.statementIndex - b.block.statementIndex;
+      });
+
+      for (var j = 0; j < sortedBindings.length; j++) {
+        var binding = sortedBindings[j];
         var boundBlock = binding.block;
         var branchTitleEls = [];
         var branchStatements = [];
