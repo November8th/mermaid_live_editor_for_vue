@@ -1,6 +1,6 @@
 /**
  * gui-editor.component.js
- * Built: 2026-05-08T02:26:12.565Z
+ * Built: 2026-05-08T02:43:02.648Z
  *
  * Concatenation of gui-editor source files (no minification).
  * Requires global Vue 2 and Mermaid loaded separately.
@@ -293,7 +293,7 @@
     return blocks;
   }
 
-  function wrapMessagesInBlock(model, messageIndices, kind, text) {
+  function wrapMessagesInBlock(model, messageIndices, kind, text, noteStatementIndices) {
     var unique = {};
     var ordered = [];
     var statements = cloneStatements(model);
@@ -304,18 +304,36 @@
       unique[idx] = true;
       ordered.push(idx);
     }
-    if (!ordered.length) return statements;
+
+    if (!ordered.length && !(noteStatementIndices && noteStatementIndices.length)) return statements;
 
     ordered.sort(function (a, b) { return a - b; });
-    var startStatementIndex = messageIndexToStatementIndex(statements, ordered[0]);
-    var endStatementIndex = messageIndexToStatementIndex(statements, ordered[ordered.length - 1]);
-    if (startStatementIndex === -1 || endStatementIndex === -1) return statements;
 
-    statements.splice(startStatementIndex, 0, {
+    var rangeStart = Infinity;
+    var rangeEnd   = -1;
+
+    for (var m = 0; m < ordered.length; m++) {
+      var si = messageIndexToStatementIndex(statements, ordered[m]);
+      if (si === -1) continue;
+      if (si < rangeStart) rangeStart = si;
+      if (si > rangeEnd)   rangeEnd   = si;
+    }
+
+    for (var n = 0; n < (noteStatementIndices || []).length; n++) {
+      var ni = noteStatementIndices[n];
+      if (ni >= 0 && ni < statements.length) {
+        if (ni < rangeStart) rangeStart = ni;
+        if (ni > rangeEnd)   rangeEnd   = ni;
+      }
+    }
+
+    if (!isFinite(rangeStart) || rangeEnd < 0) return statements;
+
+    statements.splice(rangeStart, 0, {
       type: String(kind || 'loop').toLowerCase(),
       text: text || ''
     });
-    statements.splice(endStatementIndex + 2, 0, { type: 'end' });
+    statements.splice(rangeEnd + 2, 0, { type: 'end' });
     return statements;
   }
 
@@ -391,22 +409,52 @@
     return statements;
   }
 
-  function findEnclosingBranchBlock(model, messageIndices) {
-    if (!messageIndices || !messageIndices.length) return null;
-    var sorted = messageIndices.slice().sort(function (a, b) { return a - b; });
-    var minIdx = sorted[0];
-    var maxIdx = sorted[sorted.length - 1];
+  function findEnclosingBranchBlock(model, messageIndices, noteStatementIndices) {
+    var hasMessages = messageIndices && messageIndices.length;
+    var hasNotes = noteStatementIndices && noteStatementIndices.length;
+    if (!hasMessages && !hasNotes) return null;
 
     var blocks = listBlocks((model && model.statements) || []);
     var best = null;
-    for (var i = 0; i < blocks.length; i++) {
-      var b = blocks[i];
-      if (b.kind !== 'alt' && b.kind !== 'par') continue;
-      if (b.messageStartIndex === null || b.messageEndIndex === null) continue;
-      if (b.messageStartIndex > minIdx || b.messageEndIndex < maxIdx) continue;
-      // 가장 안쪽(depth 깊은) 블록 우선
-      if (!best || b.depth > best.depth) best = b;
+
+    if (hasMessages) {
+      var sorted = messageIndices.slice().sort(function (a, b) { return a - b; });
+      var minIdx = sorted[0];
+      var maxIdx = sorted[sorted.length - 1];
+      for (var i = 0; i < blocks.length; i++) {
+        var b = blocks[i];
+        if (b.kind !== 'alt' && b.kind !== 'par') continue;
+        if (b.messageStartIndex === null || b.messageEndIndex === null) continue;
+        if (b.messageStartIndex > minIdx || b.messageEndIndex < maxIdx) continue;
+        if (hasNotes) {
+          var notesInBlock = true;
+          for (var n = 0; n < noteStatementIndices.length; n++) {
+            if (noteStatementIndices[n] <= b.statementIndex || noteStatementIndices[n] >= b.endIndex) {
+              notesInBlock = false;
+              break;
+            }
+          }
+          if (!notesInBlock) continue;
+        }
+        // 가장 안쪽(depth 깊은) 블록 우선
+        if (!best || b.depth > best.depth) best = b;
+      }
+    } else {
+      // note-only: statement index 범위 기준으로 블록 포함 여부 확인
+      var minNoteIdx = noteStatementIndices[0];
+      var maxNoteIdx = noteStatementIndices[0];
+      for (var ni = 1; ni < noteStatementIndices.length; ni++) {
+        if (noteStatementIndices[ni] < minNoteIdx) minNoteIdx = noteStatementIndices[ni];
+        if (noteStatementIndices[ni] > maxNoteIdx) maxNoteIdx = noteStatementIndices[ni];
+      }
+      for (var bi = 0; bi < blocks.length; bi++) {
+        var blk = blocks[bi];
+        if (blk.kind !== 'alt' && blk.kind !== 'par') continue;
+        if (minNoteIdx <= blk.statementIndex || maxNoteIdx >= blk.endIndex) continue;
+        if (!best || blk.depth > best.depth) best = blk;
+      }
     }
+
     return best;
   }
 
@@ -427,15 +475,24 @@
     return targetStmtIndex;
   }
 
-  function insertBranchStatement(model, messageIndices, keyword, text) {
-    var sorted = messageIndices.slice().sort(function (a, b) { return a - b; });
+  function insertBranchStatement(model, messageIndices, keyword, text, noteStatementIndices) {
     var statements = cloneStatements(model);
-    var firstMsgStmtIndex = messageIndexToStatementIndex(statements, sorted[0]);
-    if (firstMsgStmtIndex === -1) return statements;
-    var enclosing = findEnclosingBranchBlock(model, sorted);
+    var firstStmtIndex = -1;
+
+    if (messageIndices && messageIndices.length) {
+      var sorted = messageIndices.slice().sort(function (a, b) { return a - b; });
+      firstStmtIndex = messageIndexToStatementIndex(statements, sorted[0]);
+    } else if (noteStatementIndices && noteStatementIndices.length) {
+      var sortedNotes = noteStatementIndices.slice().sort(function (a, b) { return a - b; });
+      firstStmtIndex = sortedNotes[0];
+    }
+
+    if (firstStmtIndex === -1) return statements;
+
+    var enclosing = findEnclosingBranchBlock(model, messageIndices || [], noteStatementIndices);
     var insertAt = enclosing
-      ? findBranchInsertPoint(statements, enclosing, firstMsgStmtIndex)
-      : firstMsgStmtIndex;
+      ? findBranchInsertPoint(statements, enclosing, firstStmtIndex)
+      : firstStmtIndex;
     statements.splice(insertAt, 0, { type: String(keyword), text: text || '' });
     return statements;
   }
@@ -2617,26 +2674,32 @@
 
     // block / branch / note 계열은 statements 트리를 갱신하는 편집이다.
     addBranch: function (model, data) {
-      if (!model || !data || !data.keyword || !data.messageIndices || !data.messageIndices.length) return model;
+      if (!model || !data || !data.keyword) return model;
+      var messageIndices = data.messageIndices || [];
+      var noteStatementIndices = data.noteStatementIndices || [];
+      if (!messageIndices.length && !noteStatementIndices.length) return model;
       return finish(model, {
         statements: SequenceStatementUtils.insertBranchStatement(
           model,
-          data.messageIndices,
+          messageIndices,
           data.keyword,
-          data.text || ''
+          data.text || '',
+          noteStatementIndices
         )
       });
     },
 
     wrapMessagesInBlock: function (model, data) {
       var messageIndices = data && data.messageIndices ? data.messageIndices : [];
-      if (!model || !data || !data.kind || !messageIndices.length) return model;
+      var noteStatementIndices = data && data.noteStatementIndices ? data.noteStatementIndices : [];
+      if (!model || !data || !data.kind || (!messageIndices.length && !noteStatementIndices.length)) return model;
       return finish(model, {
         statements: SequenceStatementUtils.wrapMessagesInBlock(
           model,
           messageIndices,
           data.kind,
-          data.text || ''
+          data.text || '',
+          noteStatementIndices
         )
       });
     },
@@ -3339,11 +3402,26 @@
       return function () {
         if (registered) return;
         registered = true;
-        vm.$watch('selectedSequenceMessageIndices', function (val) {
-          if (!val || !val.length) SequenceBlockHandler.hideSelectionHighlight();
-        }, { deep: true });
+        var checkHide = function () {
+          var msgs = vm.$data.selectedSequenceMessageIndices;
+          var notes = vm.$data.selectedNoteStatementIndices;
+          if ((!msgs || !msgs.length) && (!notes || !notes.length)) {
+            SequenceBlockHandler.hideSelectionHighlight();
+          }
+        };
+        vm.$watch('selectedSequenceMessageIndices', checkHide, { deep: true });
+        vm.$watch('selectedNoteStatementIndices', checkHide, { deep: true });
       };
     }());
+
+    ctx.watchSequenceNoteMultiSelection = function (statementIndex, noteGroupEl) {
+      vm.$watch('selectedNoteStatementIndices', function (val) {
+        var selected = Array.isArray(val) && val.indexOf(statementIndex) !== -1;
+        if (noteGroupEl && noteGroupEl.classList) {
+          noteGroupEl.classList.toggle('sequence-note-multi-selected', selected);
+        }
+      }, { immediate: true, deep: true });
+    };
 
     ctx.getPreviewRect = function () {
       return vm.$refs.canvas && vm.$refs.canvas.getBoundingClientRect
@@ -4648,6 +4726,32 @@
       return deduped;
     },
 
+    collectNotePositions: function (svgEl, model) {
+      var statements = (model && model.statements) || [];
+      var noteStatements = [];
+      for (var i = 0; i < statements.length; i++) {
+        if (statements[i] && statements[i].type === 'note') {
+          noteStatements.push({ statementIndex: i });
+        }
+      }
+
+      var noteRects = Array.prototype.slice.call(svgEl.querySelectorAll('rect.note'));
+      var seenGroups = [], noteGroups = [];
+      for (var r = 0; r < noteRects.length; r++) {
+        var g = noteRects[r].parentNode;
+        if (g && seenGroups.indexOf(g) === -1) { seenGroups.push(g); noteGroups.push(g); }
+      }
+
+      var results = [];
+      for (var j = 0; j < Math.min(noteGroups.length, noteStatements.length); j++) {
+        var bbox = null;
+        try { bbox = noteGroups[j].getBBox(); } catch (e) {}
+        if (!bbox) continue;
+        results.push({ statementIndex: noteStatements[j].statementIndex, bbox: bbox });
+      }
+      return results;
+    },
+
     refineParticipantLifelines: function (participantMap, messages) {
       var rows = [];
       for (var i = 0; i < messages.length; i++) {
@@ -5125,7 +5229,7 @@
       this._selectionHighlight.style.display = '';
     },
 
-    _getSelectionBBox: function (selectedIndices, messages) {
+    _getSelectionBBox: function (selectedIndices, messages, selectedNoteStatementIndices, notes) {
       var pad = 12;
       var left = Infinity, top = Infinity, right = -Infinity, bottom = -Infinity;
       for (var i = 0; i < messages.length; i++) {
@@ -5137,6 +5241,15 @@
         right  = Math.max(right,  box.x + box.width);
         bottom = Math.max(bottom, box.y + box.height);
       }
+      for (var j = 0; j < (notes || []).length; j++) {
+        if ((selectedNoteStatementIndices || []).indexOf(notes[j].statementIndex) === -1) continue;
+        var nbox = notes[j].bbox;
+        if (!nbox) continue;
+        left   = Math.min(left,   nbox.x);
+        top    = Math.min(top,    nbox.y);
+        right  = Math.max(right,  nbox.x + nbox.width);
+        bottom = Math.max(bottom, nbox.y + nbox.height);
+      }
       if (!isFinite(left)) return null;
       return { x: left - pad, y: top - pad, width: right - left + pad * 2, height: bottom - top + pad * 2 };
     },
@@ -5146,15 +5259,16 @@
       this._bringOverlayToFront(svgEl);
 
       var messages = SequencePositionTracker.collectMessages(svgEl, model);
+      var notes    = SequencePositionTracker.collectNotePositions(svgEl, model);
       this._renderBlockBadges(svgEl, model, ctx);
-      this._attachSelection(svgEl, messages, ctx, canvas);
+      this._attachSelection(svgEl, messages, notes, ctx, canvas);
 
       if (ctx.watchSequenceSelectionHighlight) {
         ctx.watchSequenceSelectionHighlight();
       }
     },
 
-    _attachSelection: function (svgEl, messages, ctx, canvas) {
+    _attachSelection: function (svgEl, messages, notes, ctx, canvas) {
       var self = this;
 
       // contextmenu는 svgEl과 canvas 모두 차단
@@ -5177,6 +5291,7 @@
 
         var start = SvgPositionTracker.getSVGPoint(svgEl, e.clientX, e.clientY);
         var currentSelection = [];
+        var currentNoteSelection = [];
 
         self._selectionRect.style.display = '';
         self._updateSelectionRect(start, start);
@@ -5185,11 +5300,13 @@
           var current = SvgPositionTracker.getSVGPoint(svgEl, me.clientX, me.clientY);
           self._updateSelectionRect(start, current);
           currentSelection = self._collectSelectedMessages(start, current, messages);
+          currentNoteSelection = self._collectSelectedNotes(start, current, notes);
           ctx.setState({
             selectedSequenceParticipantId: null,
             selectedSequenceMessageIndex: null,
             selectedSequenceBlockId: null,
             selectedSequenceMessageIndices: currentSelection.slice(),
+            selectedNoteStatementIndices: currentNoteSelection.slice(),
             sequenceToolbar: null
           });
         };
@@ -5199,16 +5316,17 @@
           document.removeEventListener('mouseup', onUp);
           self._selectionRect.style.display = 'none';
 
-          if (!currentSelection.length) {
+          if (!currentSelection.length && !currentNoteSelection.length) {
             self.hideSelectionHighlight();
             ctx.setState({
               selectedSequenceMessageIndices: [],
+              selectedNoteStatementIndices: [],
               selectedSequenceBlockId: null
             });
             return;
           }
 
-          var selBBox = self._getSelectionBBox(currentSelection, messages);
+          var selBBox = self._getSelectionBBox(currentSelection, messages, currentNoteSelection, notes);
           self._showSelectionHighlight(selBBox);
 
           var toolbarPos = { x: 0, y: 0 };
@@ -5220,7 +5338,8 @@
 
           var enclosing = SequenceStatementUtils.findEnclosingBranchBlock(
             ctx.getModel ? ctx.getModel() : null,
-            currentSelection
+            currentSelection,
+            currentNoteSelection
           );
 
           ctx.setState({
@@ -5228,9 +5347,11 @@
             selectedSequenceMessageIndex: null,
             selectedSequenceBlockId: null,
             selectedSequenceMessageIndices: currentSelection.slice(),
+            selectedNoteStatementIndices: currentNoteSelection.slice(),
             sequenceToolbar: {
               type: 'selection',
               messageIndices: currentSelection.slice(),
+              noteStatementIndices: currentNoteSelection.slice(),
               parentKind: enclosing ? enclosing.kind : null,
               x: toolbarPos.x,
               y: toolbarPos.y
@@ -5241,6 +5362,27 @@
         document.addEventListener('mousemove', onMove);
         document.addEventListener('mouseup', onUp);
       });
+    },
+
+    _collectSelectedNotes: function (start, current, notes) {
+      var left = Math.min(start.x, current.x);
+      var right = Math.max(start.x, current.x);
+      var top = Math.min(start.y, current.y);
+      var bottom = Math.max(start.y, current.y);
+      var selected = [];
+
+      for (var i = 0; i < (notes || []).length; i++) {
+        var box = notes[i].bbox;
+        if (!box) continue;
+        var intersects = !(
+          box.x + box.width < left ||
+          box.x > right ||
+          box.y + box.height < top ||
+          box.y > bottom
+        );
+        if (intersects) selected.push(notes[i].statementIndex);
+      }
+      return selected;
     },
 
     _collectSelectedMessages: function (start, current, messages) {
@@ -5813,6 +5955,10 @@
             );
           });
           noteGroup.addEventListener('mouseleave', scheduleHide);
+
+          if (ctx.watchSequenceNoteMultiSelection) {
+            ctx.watchSequenceNoteMultiSelection(noteInfo.statementIndex, noteGroup);
+          }
         })(noteGroups[j], noteStatements[j]);
       }
     },
@@ -6134,7 +6280,10 @@
       },
 
       addSequenceBranch: function (data) {
-        if (this.isFlowchart || !data || !data.keyword || !data.messageIndices || !data.messageIndices.length) return;
+        if (this.isFlowchart || !data || !data.keyword) return;
+        var hasMessages = data.messageIndices && data.messageIndices.length;
+        var hasNotes = data.noteStatementIndices && data.noteStatementIndices.length;
+        if (!hasMessages && !hasNotes) return;
         this._applySequenceEdit(sequenceModelEditing.addBranch(this.model, data));
       },
 
@@ -6730,6 +6879,7 @@ Vue.component('mermaid-preview', {
       selectedSequenceParticipantId: null,
       selectedSequenceMessageIndex: null,
       selectedSequenceMessageIndices: [],
+      selectedNoteStatementIndices: [],
       selectedSequenceBlockId: null,
       selectedSequenceNoteStatementIndex: null,
 
@@ -6844,6 +6994,7 @@ Vue.component('mermaid-preview', {
       self.flowEdgeHeadPicker = false;
       self.sequenceToolbar = null;
       self.selectedSequenceMessageIndices = [];
+      self.selectedNoteStatementIndices = [];
       self.selectedSequenceBlockId = null;
       if (hadEdgeToolbar && self.editingEdgeIndex === null) {
         self.selectedEdgeIndex = null;
@@ -7976,9 +8127,11 @@ Vue.component('mermaid-preview', {
       this.$emit('add-sequence-branch', {
         keyword: keyword,
         text: keyword === 'else' ? 'case' : 'task',
-        messageIndices: (this.sequenceToolbar.messageIndices || []).slice()
+        messageIndices: (this.sequenceToolbar.messageIndices || []).slice(),
+        noteStatementIndices: (this.sequenceToolbar.noteStatementIndices || []).slice()
       });
       this.selectedSequenceMessageIndices = [];
+      this.selectedNoteStatementIndices = [];
       this.sequenceToolbar = null;
     },
 
@@ -7987,9 +8140,11 @@ Vue.component('mermaid-preview', {
       this.$emit('wrap-sequence-messages-in-block', {
         kind: kind,
         text: kind + '_title',
-        messageIndices: (this.sequenceToolbar.messageIndices || []).slice()
+        messageIndices: (this.sequenceToolbar.messageIndices || []).slice(),
+        noteStatementIndices: (this.sequenceToolbar.noteStatementIndices || []).slice()
       });
       this.selectedSequenceMessageIndices = [];
+      this.selectedNoteStatementIndices = [];
       this.sequenceToolbar = null;
     },
 

@@ -314,6 +314,10 @@
             );
           });
           noteGroup.addEventListener('mouseleave', scheduleHide);
+
+          if (ctx.watchSequenceNoteMultiSelection) {
+            ctx.watchSequenceNoteMultiSelection(noteInfo.statementIndex, noteGroup);
+          }
         })(noteGroups[j], noteStatements[j]);
       }
     },

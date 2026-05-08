@@ -185,7 +185,7 @@
     return blocks;
   }
 
-  function wrapMessagesInBlock(model, messageIndices, kind, text) {
+  function wrapMessagesInBlock(model, messageIndices, kind, text, noteStatementIndices) {
     var unique = {};
     var ordered = [];
     var statements = cloneStatements(model);
@@ -196,18 +196,36 @@
       unique[idx] = true;
       ordered.push(idx);
     }
-    if (!ordered.length) return statements;
+
+    if (!ordered.length && !(noteStatementIndices && noteStatementIndices.length)) return statements;
 
     ordered.sort(function (a, b) { return a - b; });
-    var startStatementIndex = messageIndexToStatementIndex(statements, ordered[0]);
-    var endStatementIndex = messageIndexToStatementIndex(statements, ordered[ordered.length - 1]);
-    if (startStatementIndex === -1 || endStatementIndex === -1) return statements;
 
-    statements.splice(startStatementIndex, 0, {
+    var rangeStart = Infinity;
+    var rangeEnd   = -1;
+
+    for (var m = 0; m < ordered.length; m++) {
+      var si = messageIndexToStatementIndex(statements, ordered[m]);
+      if (si === -1) continue;
+      if (si < rangeStart) rangeStart = si;
+      if (si > rangeEnd)   rangeEnd   = si;
+    }
+
+    for (var n = 0; n < (noteStatementIndices || []).length; n++) {
+      var ni = noteStatementIndices[n];
+      if (ni >= 0 && ni < statements.length) {
+        if (ni < rangeStart) rangeStart = ni;
+        if (ni > rangeEnd)   rangeEnd   = ni;
+      }
+    }
+
+    if (!isFinite(rangeStart) || rangeEnd < 0) return statements;
+
+    statements.splice(rangeStart, 0, {
       type: String(kind || 'loop').toLowerCase(),
       text: text || ''
     });
-    statements.splice(endStatementIndex + 2, 0, { type: 'end' });
+    statements.splice(rangeEnd + 2, 0, { type: 'end' });
     return statements;
   }
 
@@ -283,22 +301,52 @@
     return statements;
   }
 
-  function findEnclosingBranchBlock(model, messageIndices) {
-    if (!messageIndices || !messageIndices.length) return null;
-    var sorted = messageIndices.slice().sort(function (a, b) { return a - b; });
-    var minIdx = sorted[0];
-    var maxIdx = sorted[sorted.length - 1];
+  function findEnclosingBranchBlock(model, messageIndices, noteStatementIndices) {
+    var hasMessages = messageIndices && messageIndices.length;
+    var hasNotes = noteStatementIndices && noteStatementIndices.length;
+    if (!hasMessages && !hasNotes) return null;
 
     var blocks = listBlocks((model && model.statements) || []);
     var best = null;
-    for (var i = 0; i < blocks.length; i++) {
-      var b = blocks[i];
-      if (b.kind !== 'alt' && b.kind !== 'par') continue;
-      if (b.messageStartIndex === null || b.messageEndIndex === null) continue;
-      if (b.messageStartIndex > minIdx || b.messageEndIndex < maxIdx) continue;
-      // 가장 안쪽(depth 깊은) 블록 우선
-      if (!best || b.depth > best.depth) best = b;
+
+    if (hasMessages) {
+      var sorted = messageIndices.slice().sort(function (a, b) { return a - b; });
+      var minIdx = sorted[0];
+      var maxIdx = sorted[sorted.length - 1];
+      for (var i = 0; i < blocks.length; i++) {
+        var b = blocks[i];
+        if (b.kind !== 'alt' && b.kind !== 'par') continue;
+        if (b.messageStartIndex === null || b.messageEndIndex === null) continue;
+        if (b.messageStartIndex > minIdx || b.messageEndIndex < maxIdx) continue;
+        if (hasNotes) {
+          var notesInBlock = true;
+          for (var n = 0; n < noteStatementIndices.length; n++) {
+            if (noteStatementIndices[n] <= b.statementIndex || noteStatementIndices[n] >= b.endIndex) {
+              notesInBlock = false;
+              break;
+            }
+          }
+          if (!notesInBlock) continue;
+        }
+        // 가장 안쪽(depth 깊은) 블록 우선
+        if (!best || b.depth > best.depth) best = b;
+      }
+    } else {
+      // note-only: statement index 범위 기준으로 블록 포함 여부 확인
+      var minNoteIdx = noteStatementIndices[0];
+      var maxNoteIdx = noteStatementIndices[0];
+      for (var ni = 1; ni < noteStatementIndices.length; ni++) {
+        if (noteStatementIndices[ni] < minNoteIdx) minNoteIdx = noteStatementIndices[ni];
+        if (noteStatementIndices[ni] > maxNoteIdx) maxNoteIdx = noteStatementIndices[ni];
+      }
+      for (var bi = 0; bi < blocks.length; bi++) {
+        var blk = blocks[bi];
+        if (blk.kind !== 'alt' && blk.kind !== 'par') continue;
+        if (minNoteIdx <= blk.statementIndex || maxNoteIdx >= blk.endIndex) continue;
+        if (!best || blk.depth > best.depth) best = blk;
+      }
     }
+
     return best;
   }
 
@@ -319,15 +367,24 @@
     return targetStmtIndex;
   }
 
-  function insertBranchStatement(model, messageIndices, keyword, text) {
-    var sorted = messageIndices.slice().sort(function (a, b) { return a - b; });
+  function insertBranchStatement(model, messageIndices, keyword, text, noteStatementIndices) {
     var statements = cloneStatements(model);
-    var firstMsgStmtIndex = messageIndexToStatementIndex(statements, sorted[0]);
-    if (firstMsgStmtIndex === -1) return statements;
-    var enclosing = findEnclosingBranchBlock(model, sorted);
+    var firstStmtIndex = -1;
+
+    if (messageIndices && messageIndices.length) {
+      var sorted = messageIndices.slice().sort(function (a, b) { return a - b; });
+      firstStmtIndex = messageIndexToStatementIndex(statements, sorted[0]);
+    } else if (noteStatementIndices && noteStatementIndices.length) {
+      var sortedNotes = noteStatementIndices.slice().sort(function (a, b) { return a - b; });
+      firstStmtIndex = sortedNotes[0];
+    }
+
+    if (firstStmtIndex === -1) return statements;
+
+    var enclosing = findEnclosingBranchBlock(model, messageIndices || [], noteStatementIndices);
     var insertAt = enclosing
-      ? findBranchInsertPoint(statements, enclosing, firstMsgStmtIndex)
-      : firstMsgStmtIndex;
+      ? findBranchInsertPoint(statements, enclosing, firstStmtIndex)
+      : firstStmtIndex;
     statements.splice(insertAt, 0, { type: String(keyword), text: text || '' });
     return statements;
   }

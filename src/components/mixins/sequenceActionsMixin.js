@@ -93,7 +93,10 @@
       },
 
       addSequenceBranch: function (data) {
-        if (this.isFlowchart || !data || !data.keyword || !data.messageIndices || !data.messageIndices.length) return;
+        if (this.isFlowchart || !data || !data.keyword) return;
+        var hasMessages = data.messageIndices && data.messageIndices.length;
+        var hasNotes = data.noteStatementIndices && data.noteStatementIndices.length;
+        if (!hasMessages && !hasNotes) return;
         this._applySequenceEdit(sequenceModelEditing.addBranch(this.model, data));
       },
 

@@ -44,7 +44,7 @@
       this._selectionHighlight.style.display = '';
     },
 
-    _getSelectionBBox: function (selectedIndices, messages) {
+    _getSelectionBBox: function (selectedIndices, messages, selectedNoteStatementIndices, notes) {
       var pad = 12;
       var left = Infinity, top = Infinity, right = -Infinity, bottom = -Infinity;
       for (var i = 0; i < messages.length; i++) {
@@ -56,6 +56,15 @@
         right  = Math.max(right,  box.x + box.width);
         bottom = Math.max(bottom, box.y + box.height);
       }
+      for (var j = 0; j < (notes || []).length; j++) {
+        if ((selectedNoteStatementIndices || []).indexOf(notes[j].statementIndex) === -1) continue;
+        var nbox = notes[j].bbox;
+        if (!nbox) continue;
+        left   = Math.min(left,   nbox.x);
+        top    = Math.min(top,    nbox.y);
+        right  = Math.max(right,  nbox.x + nbox.width);
+        bottom = Math.max(bottom, nbox.y + nbox.height);
+      }
       if (!isFinite(left)) return null;
       return { x: left - pad, y: top - pad, width: right - left + pad * 2, height: bottom - top + pad * 2 };
     },
@@ -65,15 +74,16 @@
       this._bringOverlayToFront(svgEl);
 
       var messages = SequencePositionTracker.collectMessages(svgEl, model);
+      var notes    = SequencePositionTracker.collectNotePositions(svgEl, model);
       this._renderBlockBadges(svgEl, model, ctx);
-      this._attachSelection(svgEl, messages, ctx, canvas);
+      this._attachSelection(svgEl, messages, notes, ctx, canvas);
 
       if (ctx.watchSequenceSelectionHighlight) {
         ctx.watchSequenceSelectionHighlight();
       }
     },
 
-    _attachSelection: function (svgEl, messages, ctx, canvas) {
+    _attachSelection: function (svgEl, messages, notes, ctx, canvas) {
       var self = this;
 
       // contextmenu는 svgEl과 canvas 모두 차단
@@ -96,6 +106,7 @@
 
         var start = SvgPositionTracker.getSVGPoint(svgEl, e.clientX, e.clientY);
         var currentSelection = [];
+        var currentNoteSelection = [];
 
         self._selectionRect.style.display = '';
         self._updateSelectionRect(start, start);
@@ -104,11 +115,13 @@
           var current = SvgPositionTracker.getSVGPoint(svgEl, me.clientX, me.clientY);
           self._updateSelectionRect(start, current);
           currentSelection = self._collectSelectedMessages(start, current, messages);
+          currentNoteSelection = self._collectSelectedNotes(start, current, notes);
           ctx.setState({
             selectedSequenceParticipantId: null,
             selectedSequenceMessageIndex: null,
             selectedSequenceBlockId: null,
             selectedSequenceMessageIndices: currentSelection.slice(),
+            selectedNoteStatementIndices: currentNoteSelection.slice(),
             sequenceToolbar: null
           });
         };
@@ -118,16 +131,17 @@
           document.removeEventListener('mouseup', onUp);
           self._selectionRect.style.display = 'none';
 
-          if (!currentSelection.length) {
+          if (!currentSelection.length && !currentNoteSelection.length) {
             self.hideSelectionHighlight();
             ctx.setState({
               selectedSequenceMessageIndices: [],
+              selectedNoteStatementIndices: [],
               selectedSequenceBlockId: null
             });
             return;
           }
 
-          var selBBox = self._getSelectionBBox(currentSelection, messages);
+          var selBBox = self._getSelectionBBox(currentSelection, messages, currentNoteSelection, notes);
           self._showSelectionHighlight(selBBox);
 
           var toolbarPos = { x: 0, y: 0 };
@@ -139,7 +153,8 @@
 
           var enclosing = SequenceStatementUtils.findEnclosingBranchBlock(
             ctx.getModel ? ctx.getModel() : null,
-            currentSelection
+            currentSelection,
+            currentNoteSelection
           );
 
           ctx.setState({
@@ -147,9 +162,11 @@
             selectedSequenceMessageIndex: null,
             selectedSequenceBlockId: null,
             selectedSequenceMessageIndices: currentSelection.slice(),
+            selectedNoteStatementIndices: currentNoteSelection.slice(),
             sequenceToolbar: {
               type: 'selection',
               messageIndices: currentSelection.slice(),
+              noteStatementIndices: currentNoteSelection.slice(),
               parentKind: enclosing ? enclosing.kind : null,
               x: toolbarPos.x,
               y: toolbarPos.y
@@ -160,6 +177,27 @@
         document.addEventListener('mousemove', onMove);
         document.addEventListener('mouseup', onUp);
       });
+    },
+
+    _collectSelectedNotes: function (start, current, notes) {
+      var left = Math.min(start.x, current.x);
+      var right = Math.max(start.x, current.x);
+      var top = Math.min(start.y, current.y);
+      var bottom = Math.max(start.y, current.y);
+      var selected = [];
+
+      for (var i = 0; i < (notes || []).length; i++) {
+        var box = notes[i].bbox;
+        if (!box) continue;
+        var intersects = !(
+          box.x + box.width < left ||
+          box.x > right ||
+          box.y + box.height < top ||
+          box.y > bottom
+        );
+        if (intersects) selected.push(notes[i].statementIndex);
+      }
+      return selected;
     },
 
     _collectSelectedMessages: function (start, current, messages) {

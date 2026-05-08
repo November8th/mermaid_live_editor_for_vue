@@ -208,11 +208,26 @@
       return function () {
         if (registered) return;
         registered = true;
-        vm.$watch('selectedSequenceMessageIndices', function (val) {
-          if (!val || !val.length) SequenceBlockHandler.hideSelectionHighlight();
-        }, { deep: true });
+        var checkHide = function () {
+          var msgs = vm.$data.selectedSequenceMessageIndices;
+          var notes = vm.$data.selectedNoteStatementIndices;
+          if ((!msgs || !msgs.length) && (!notes || !notes.length)) {
+            SequenceBlockHandler.hideSelectionHighlight();
+          }
+        };
+        vm.$watch('selectedSequenceMessageIndices', checkHide, { deep: true });
+        vm.$watch('selectedNoteStatementIndices', checkHide, { deep: true });
       };
     }());
+
+    ctx.watchSequenceNoteMultiSelection = function (statementIndex, noteGroupEl) {
+      vm.$watch('selectedNoteStatementIndices', function (val) {
+        var selected = Array.isArray(val) && val.indexOf(statementIndex) !== -1;
+        if (noteGroupEl && noteGroupEl.classList) {
+          noteGroupEl.classList.toggle('sequence-note-multi-selected', selected);
+        }
+      }, { immediate: true, deep: true });
+    };
 
     ctx.getPreviewRect = function () {
       return vm.$refs.canvas && vm.$refs.canvas.getBoundingClientRect

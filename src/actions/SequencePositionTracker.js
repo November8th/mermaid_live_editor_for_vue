@@ -369,6 +369,32 @@
       return deduped;
     },
 
+    collectNotePositions: function (svgEl, model) {
+      var statements = (model && model.statements) || [];
+      var noteStatements = [];
+      for (var i = 0; i < statements.length; i++) {
+        if (statements[i] && statements[i].type === 'note') {
+          noteStatements.push({ statementIndex: i });
+        }
+      }
+
+      var noteRects = Array.prototype.slice.call(svgEl.querySelectorAll('rect.note'));
+      var seenGroups = [], noteGroups = [];
+      for (var r = 0; r < noteRects.length; r++) {
+        var g = noteRects[r].parentNode;
+        if (g && seenGroups.indexOf(g) === -1) { seenGroups.push(g); noteGroups.push(g); }
+      }
+
+      var results = [];
+      for (var j = 0; j < Math.min(noteGroups.length, noteStatements.length); j++) {
+        var bbox = null;
+        try { bbox = noteGroups[j].getBBox(); } catch (e) {}
+        if (!bbox) continue;
+        results.push({ statementIndex: noteStatements[j].statementIndex, bbox: bbox });
+      }
+      return results;
+    },
+
     refineParticipantLifelines: function (participantMap, messages) {
       var rows = [];
       for (var i = 0; i < messages.length; i++) {

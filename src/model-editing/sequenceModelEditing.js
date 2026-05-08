@@ -192,26 +192,32 @@
 
     // block / branch / note 계열은 statements 트리를 갱신하는 편집이다.
     addBranch: function (model, data) {
-      if (!model || !data || !data.keyword || !data.messageIndices || !data.messageIndices.length) return model;
+      if (!model || !data || !data.keyword) return model;
+      var messageIndices = data.messageIndices || [];
+      var noteStatementIndices = data.noteStatementIndices || [];
+      if (!messageIndices.length && !noteStatementIndices.length) return model;
       return finish(model, {
         statements: SequenceStatementUtils.insertBranchStatement(
           model,
-          data.messageIndices,
+          messageIndices,
           data.keyword,
-          data.text || ''
+          data.text || '',
+          noteStatementIndices
         )
       });
     },
 
     wrapMessagesInBlock: function (model, data) {
       var messageIndices = data && data.messageIndices ? data.messageIndices : [];
-      if (!model || !data || !data.kind || !messageIndices.length) return model;
+      var noteStatementIndices = data && data.noteStatementIndices ? data.noteStatementIndices : [];
+      if (!model || !data || !data.kind || (!messageIndices.length && !noteStatementIndices.length)) return model;
       return finish(model, {
         statements: SequenceStatementUtils.wrapMessagesInBlock(
           model,
           messageIndices,
           data.kind,
-          data.text || ''
+          data.text || '',
+          noteStatementIndices
         )
       });
     },

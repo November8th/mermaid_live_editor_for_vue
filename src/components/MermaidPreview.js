@@ -45,6 +45,7 @@ Vue.component('mermaid-preview', {
       selectedSequenceParticipantId: null,
       selectedSequenceMessageIndex: null,
       selectedSequenceMessageIndices: [],
+      selectedNoteStatementIndices: [],
       selectedSequenceBlockId: null,
       selectedSequenceNoteStatementIndex: null,
 
@@ -159,6 +160,7 @@ Vue.component('mermaid-preview', {
       self.flowEdgeHeadPicker = false;
       self.sequenceToolbar = null;
       self.selectedSequenceMessageIndices = [];
+      self.selectedNoteStatementIndices = [];
       self.selectedSequenceBlockId = null;
       if (hadEdgeToolbar && self.editingEdgeIndex === null) {
         self.selectedEdgeIndex = null;
@@ -1291,9 +1293,11 @@ Vue.component('mermaid-preview', {
       this.$emit('add-sequence-branch', {
         keyword: keyword,
         text: keyword === 'else' ? 'case' : 'task',
-        messageIndices: (this.sequenceToolbar.messageIndices || []).slice()
+        messageIndices: (this.sequenceToolbar.messageIndices || []).slice(),
+        noteStatementIndices: (this.sequenceToolbar.noteStatementIndices || []).slice()
       });
       this.selectedSequenceMessageIndices = [];
+      this.selectedNoteStatementIndices = [];
       this.sequenceToolbar = null;
     },
 
@@ -1302,9 +1306,11 @@ Vue.component('mermaid-preview', {
       this.$emit('wrap-sequence-messages-in-block', {
         kind: kind,
         text: kind + '_title',
-        messageIndices: (this.sequenceToolbar.messageIndices || []).slice()
+        messageIndices: (this.sequenceToolbar.messageIndices || []).slice(),
+        noteStatementIndices: (this.sequenceToolbar.noteStatementIndices || []).slice()
       });
       this.selectedSequenceMessageIndices = [];
+      this.selectedNoteStatementIndices = [];
       this.sequenceToolbar = null;
     },
 

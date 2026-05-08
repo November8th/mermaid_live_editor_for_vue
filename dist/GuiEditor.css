@@ -1327,6 +1327,11 @@
   stroke-width: 1.5px;
   rx: 4px;
 }
+.gui-editor-shell .preview-area__canvas .sequence-note-multi-selected rect {
+  stroke: #1565c0 !important;
+  stroke-width: 2px !important;
+  filter: drop-shadow(0 0 6px rgba(21, 101, 192, 0.3));
+}
 .gui-editor-shell .sequence-block-badge-hit {
   fill: rgba(255, 255, 255, 0.96);
   stroke: #64748b;
