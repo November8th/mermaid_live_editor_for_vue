@@ -1,6 +1,6 @@
 /**
  * gui-editor.component.js
- * Built: 2026-05-11T02:21:32.780Z
+ * Built: 2026-05-11T02:39:08.704Z
  *
  * Concatenation of gui-editor source files (no minification).
  * Requires global Vue 2 and Mermaid loaded separately.
@@ -5989,11 +5989,29 @@
       participantMap = SequencePositionTracker.refineParticipantLifelines(participantMap, messages);
       var insertSlots = SequencePositionTracker.collectInsertSlots(participantMap, messages, notes, model);
 
+      // 메시지 엣지와 노트가 공유하는 hover 상태 — 한쪽에 호버하면 다른 쪽 버튼이 사라진다
+      var sharedInsert = { btns: null, hideTimer: null };
+      function sharedInsertCancelHide() {
+        if (sharedInsert.hideTimer !== null) { clearTimeout(sharedInsert.hideTimer); sharedInsert.hideTimer = null; }
+      }
+      function sharedInsertHideNow() {
+        sharedInsertCancelHide();
+        if (sharedInsert.btns) {
+          for (var k = 0; k < sharedInsert.btns.length; k++) sharedInsert.btns[k].remove();
+          sharedInsert.btns = null;
+        }
+        if (svgEl.dataset) delete svgEl.dataset.noteHoverActive;
+      }
+      function sharedInsertScheduleHide() {
+        sharedInsertCancelHide();
+        sharedInsert.hideTimer = setTimeout(function () { sharedInsertHideNow(); }, 500);
+      }
+
       SequenceMessageDragHandler.initOverlay(svgEl);
       // SequenceMessageDragHandler.attach(svgEl, participantMap, insertSlots, ctx);
       SequenceSvgHandler._attachParticipants(participantTargets, svgEl, ctx);
-      SequenceSvgHandler._attachMessages(messages, svgEl, model, participantMap, ctx);
-      SequenceSvgHandler._attachNotes(svgEl, model, ctx, participantMap);
+      SequenceSvgHandler._attachMessages(messages, svgEl, model, participantMap, ctx, sharedInsert, sharedInsertCancelHide, sharedInsertHideNow, sharedInsertScheduleHide);
+      SequenceSvgHandler._attachNotes(svgEl, model, ctx, participantMap, sharedInsert, sharedInsertCancelHide, sharedInsertHideNow, sharedInsertScheduleHide);
     },
 
     _attachParticipants: function (participantTargets, svgEl, ctx) {
@@ -6035,29 +6053,12 @@
       ctx.watchSequenceParticipantSelection(data.id, el);
     },
 
-    _attachMessages: function (messages, svgEl, model, participantMap, ctx) {
+    _attachMessages: function (messages, svgEl, model, participantMap, ctx, shared, sharedCancelHide, sharedHideNow, sharedScheduleHide) {
       var oldOverlay = svgEl.querySelector('#sequence-message-insert-overlay');
       if (oldOverlay) oldOverlay.remove();
       var msgOverlay = document.createElementNS('http://www.w3.org/2000/svg', 'g');
       msgOverlay.setAttribute('id', 'sequence-message-insert-overlay');
       svgEl.appendChild(msgOverlay);
-
-      var shared = { btns: null, hideTimer: null };
-
-      function sharedCancelHide() {
-        if (shared.hideTimer !== null) { clearTimeout(shared.hideTimer); shared.hideTimer = null; }
-      }
-      function sharedHideNow() {
-        sharedCancelHide();
-        if (shared.btns) {
-          for (var k = 0; k < shared.btns.length; k++) shared.btns[k].remove();
-          shared.btns = null;
-        }
-      }
-      function sharedScheduleHide() {
-        sharedCancelHide();
-        shared.hideTimer = setTimeout(function () { sharedHideNow(); }, 500);
-      }
 
       for (var i = 0; i < messages.length; i++) {
         SequenceSvgHandler._attachMessage(messages[i], svgEl, model, participantMap, msgOverlay, shared, sharedCancelHide, sharedHideNow, sharedScheduleHide, ctx);
@@ -6269,7 +6270,7 @@
       ctx.focusSequenceMessageInput();
     },
 
-    _attachNotes: function (svgEl, model, ctx, participantMap) {
+    _attachNotes: function (svgEl, model, ctx, participantMap, shared, sharedCancelHide, sharedHideNow, sharedScheduleHide) {
       var noteRects = Array.prototype.slice.call(svgEl.querySelectorAll('rect.note'));
       var noteStatements = [];
       var statements = (model && model.statements) || [];
@@ -6290,24 +6291,6 @@
       var noteOverlay = document.createElementNS('http://www.w3.org/2000/svg', 'g');
       noteOverlay.setAttribute('id', 'sequence-note-insert-overlay');
       svgEl.appendChild(noteOverlay);
-
-      var shared = { btns: null, hideTimer: null };
-
-      function sharedCancelHide() {
-        if (shared.hideTimer !== null) { clearTimeout(shared.hideTimer); shared.hideTimer = null; }
-      }
-      function sharedHideNow() {
-        sharedCancelHide();
-        if (shared.btns) {
-          for (var k = 0; k < shared.btns.length; k++) shared.btns[k].remove();
-          shared.btns = null;
-        }
-        if (svgEl.dataset) delete svgEl.dataset.noteHoverActive;
-      }
-      function sharedScheduleHide() {
-        sharedCancelHide();
-        shared.hideTimer = setTimeout(function () { sharedHideNow(); }, 150);
-      }
 
       for (var j = 0; j < Math.min(noteGroups.length, noteStatements.length); j++) {
         (function (noteGroup, noteInfo) {
@@ -6423,6 +6406,9 @@
             var currentTarget = null;
             var dragLine = SequenceMessageDragHandler._dragLine;
             var targetLine = SequenceMessageDragHandler._targetLine;
+            var pointerClientX = e.clientX;
+            var pointerClientY = e.clientY;
+            var autoPanFrame = null;
 
             var clearTarget = function () {
               if (currentTarget && participantMap[currentTarget] && participantMap[currentTarget].el) {
@@ -6446,7 +6432,61 @@
               }
             };
 
+            var getAutoPanDelta = function (clientX, clientY) {
+              var rect = ctx.getPreviewRect ? ctx.getPreviewRect() : null;
+              if (!rect) return { dx: 0, dy: 0 };
+              var threshold = 56, maxStep = 8, dx = 0, dy = 0, progress = 0;
+              if (clientX <= rect.left + threshold) {
+                progress = Math.min(1, (rect.left + threshold - clientX) / threshold);
+                dx = Math.ceil(progress * maxStep);
+              } else if (clientX >= rect.right - threshold) {
+                progress = Math.min(1, (clientX - (rect.right - threshold)) / threshold);
+                dx = -Math.ceil(progress * maxStep);
+              }
+              if (clientY <= rect.top + threshold) {
+                progress = Math.min(1, (rect.top + threshold - clientY) / threshold);
+                dy = Math.ceil(progress * maxStep);
+              } else if (clientY >= rect.bottom - threshold) {
+                progress = Math.min(1, (clientY - (rect.bottom - threshold)) / threshold);
+                dy = -Math.ceil(progress * maxStep);
+              }
+              return { dx: dx, dy: dy };
+            };
+
+            var stopAutoPan = function () {
+              if (!autoPanFrame) return;
+              cancelAnimationFrame(autoPanFrame);
+              autoPanFrame = null;
+            };
+
+            var updateDragAtClient = function (clientX, clientY) {
+              var svgPt = SvgPositionTracker.getSVGPoint(svgEl, clientX, clientY);
+              if (dragLine) { dragLine.setAttribute('x2', svgPt.x); dragLine.setAttribute('y2', pos.y); }
+              setTarget(findNearestByX(svgPt.x));
+            };
+
+            var autoPanTick = function () {
+              autoPanFrame = null;
+              if (!didDrag) return;
+              var delta = getAutoPanDelta(pointerClientX, pointerClientY);
+              if (!delta.dx && !delta.dy) return;
+              if (ctx.panPreviewBy) {
+                ctx.panPreviewBy(delta.dx, delta.dy);
+                updateDragAtClient(pointerClientX, pointerClientY);
+              }
+              autoPanFrame = requestAnimationFrame(autoPanTick);
+            };
+
+            var scheduleAutoPan = function () {
+              if (autoPanFrame) return;
+              var delta = getAutoPanDelta(pointerClientX, pointerClientY);
+              if (!delta.dx && !delta.dy) return;
+              autoPanFrame = requestAnimationFrame(autoPanTick);
+            };
+
             var onMove = function (me) {
+              pointerClientX = me.clientX;
+              pointerClientY = me.clientY;
               if (!hasDrag) return;
               var dx = me.clientX - startClient.x, dy = me.clientY - startClient.y;
               if (!didDrag && (dx * dx + dy * dy) > 25) {
@@ -6458,14 +6498,14 @@
                 }
               }
               if (!didDrag) return;
-              var svgPt = SvgPositionTracker.getSVGPoint(svgEl, me.clientX, me.clientY);
-              if (dragLine) { dragLine.setAttribute('x2', svgPt.x); dragLine.setAttribute('y2', pos.y); }
-              setTarget(findNearestByX(svgPt.x));
+              updateDragAtClient(me.clientX, me.clientY);
+              scheduleAutoPan();
             };
 
             var onUp = function (me) {
               document.removeEventListener('mousemove', onMove);
               document.removeEventListener('mouseup', onUp);
+              stopAutoPan();
               clearTarget();
               if (dragLine) dragLine.style.display = 'none';
               if (targetLine) targetLine.style.display = 'none';
