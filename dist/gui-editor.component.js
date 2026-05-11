@@ -1,6 +1,6 @@
 /**
  * gui-editor.component.js
- * Built: 2026-05-11T02:39:08.704Z
+ * Built: 2026-05-11T03:02:01.965Z
  *
  * Concatenation of gui-editor source files (no minification).
  * Requires global Vue 2 and Mermaid loaded separately.
@@ -5523,6 +5523,8 @@
         }
         if (svgEl.dataset) delete svgEl.dataset.blockBtnActive;
       }
+      // message/note 버튼과 상호 억제를 위해 현재 hide 함수를 static으로 노출
+      SequenceBlockHandler._currentHideBlockNow = sharedHideNow;
       function sharedScheduleHide() {
         sharedCancelHide();
         shared.hideTimer = setTimeout(function () { sharedHideNow(); }, 500);
@@ -5925,6 +5927,7 @@
             try { bbox = titleEl.getBBox ? titleEl.getBBox() : null; } catch (e2) {}
             if (!bbox || !bbox.width) return;
             sharedHideNow();
+            if (SequenceSvgHandler && SequenceSvgHandler._currentHideInsertNow) SequenceSvgHandler._currentHideInsertNow();
             if (svgEl.dataset) svgEl.dataset.blockBtnActive = '1';
 
             // participant마다 + 버튼 하나씩, 각자의 lifeline cx에 배치
@@ -6002,6 +6005,8 @@
         }
         if (svgEl.dataset) delete svgEl.dataset.noteHoverActive;
       }
+      // block title 버튼과 상호 억제를 위해 현재 hide 함수를 static으로 노출
+      SequenceSvgHandler._currentHideInsertNow = sharedInsertHideNow;
       function sharedInsertScheduleHide() {
         sharedInsertCancelHide();
         sharedInsert.hideTimer = setTimeout(function () { sharedInsertHideNow(); }, 500);
@@ -6125,6 +6130,7 @@
         if (textEl) textEl.classList.add('sequence-message-text-hovered');
         if (!data.bbox) return;
         sharedHideNow();
+        if (SequenceBlockHandler && SequenceBlockHandler._currentHideBlockNow) SequenceBlockHandler._currentHideBlockNow();
         var bboxCx = data.bbox.x + data.bbox.width / 2;
         var allBtns = [];
 
@@ -6324,6 +6330,7 @@
 
           noteGroup.addEventListener('mouseenter', function () {
             sharedHideNow();
+            if (SequenceBlockHandler && SequenceBlockHandler._currentHideBlockNow) SequenceBlockHandler._currentHideBlockNow();
             if (svgEl.dataset) svgEl.dataset.noteHoverActive = '1';
             var bbox;
             try { bbox = noteGroup.getBBox(); } catch (e) { return; }

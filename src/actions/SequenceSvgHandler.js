@@ -29,6 +29,8 @@
         }
         if (svgEl.dataset) delete svgEl.dataset.noteHoverActive;
       }
+      // block title 버튼과 상호 억제를 위해 현재 hide 함수를 static으로 노출
+      SequenceSvgHandler._currentHideInsertNow = sharedInsertHideNow;
       function sharedInsertScheduleHide() {
         sharedInsertCancelHide();
         sharedInsert.hideTimer = setTimeout(function () { sharedInsertHideNow(); }, 500);
@@ -152,6 +154,7 @@
         if (textEl) textEl.classList.add('sequence-message-text-hovered');
         if (!data.bbox) return;
         sharedHideNow();
+        if (SequenceBlockHandler && SequenceBlockHandler._currentHideBlockNow) SequenceBlockHandler._currentHideBlockNow();
         var bboxCx = data.bbox.x + data.bbox.width / 2;
         var allBtns = [];
 
@@ -351,6 +354,7 @@
 
           noteGroup.addEventListener('mouseenter', function () {
             sharedHideNow();
+            if (SequenceBlockHandler && SequenceBlockHandler._currentHideBlockNow) SequenceBlockHandler._currentHideBlockNow();
             if (svgEl.dataset) svgEl.dataset.noteHoverActive = '1';
             var bbox;
             try { bbox = noteGroup.getBBox(); } catch (e) { return; }

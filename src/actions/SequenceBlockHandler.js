@@ -261,6 +261,8 @@
         }
         if (svgEl.dataset) delete svgEl.dataset.blockBtnActive;
       }
+      // message/note 버튼과 상호 억제를 위해 현재 hide 함수를 static으로 노출
+      SequenceBlockHandler._currentHideBlockNow = sharedHideNow;
       function sharedScheduleHide() {
         sharedCancelHide();
         shared.hideTimer = setTimeout(function () { sharedHideNow(); }, 500);
@@ -663,6 +665,7 @@
             try { bbox = titleEl.getBBox ? titleEl.getBBox() : null; } catch (e2) {}
             if (!bbox || !bbox.width) return;
             sharedHideNow();
+            if (SequenceSvgHandler && SequenceSvgHandler._currentHideInsertNow) SequenceSvgHandler._currentHideInsertNow();
             if (svgEl.dataset) svgEl.dataset.blockBtnActive = '1';
 
             // participant마다 + 버튼 하나씩, 각자의 lifeline cx에 배치
