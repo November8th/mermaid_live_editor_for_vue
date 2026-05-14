@@ -788,11 +788,19 @@ Vue.component('mermaid-preview', {
 
     // 공통 노드 편집 유틸
 
+    isStaticDiagram: function () {
+      return !!(this.model && this.model.profile === 'static');
+    },
+
+    isStaticNodeEditing: function () {
+      return !!(this.editingNodeId && this.isStaticDiagram());
+    },
+
     confirmNodeEdit: function () {
       if (this.editingNodeId && this.editingText.trim()) {
         this.$emit('update-node-text', {
           nodeId: this.editingNodeId,
-          text:   this.editingText.trim()
+          text:   SvgNodeHandler.toModelText(this.model, this.editingText.trim())
         });
       }
       this.editingNodeId = null;
@@ -809,6 +817,17 @@ Vue.component('mermaid-preview', {
     onNodeEditKeyDown: function (e) {
       if (e.key === 'Enter')  { e.preventDefault(); this.confirmNodeEdit(); }
       if (e.key === 'Escape') { this.cancelNodeEdit(); }
+    },
+
+    onStaticNodeEditKeyDown: function (e) {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        e.preventDefault();
+        this.confirmNodeEdit();
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        this.cancelNodeEdit();
+      }
     },
 
     // 공통 엣지 편집 유틸
@@ -953,19 +972,23 @@ Vue.component('mermaid-preview', {
           break;
         }
       }
+      var isStatic = this.isStaticDiagram();
+      var editText = SvgNodeHandler.toEditableText(this.model, node ? (node.text || node.id) : '');
       var width = 240;
       var left = canvasRect ? (targetRect.left - canvasRect.left + (targetRect.width / 2) - (width / 2)) : 0;
       var top = canvasRect ? (targetRect.top - canvasRect.top + (targetRect.height / 2) - 18) : 0;
       this.editingNodeId = nodeId;
-      this.editingText = node ? (node.text || node.id) : '';
+      this.editingText = editText;
       this.editingNodeColor = node && node.fill ? node.fill : '#e2e8f0';
-      this.editInputStyle = {
-        position: 'absolute',
-        left: Math.max(8, left) + 'px',
-        top: Math.max(8, top) + 'px',
-        zIndex: 1000,
-        width: width + 'px'
-      };
+      this.editInputStyle = isStatic
+        ? SvgNodeHandler.buildStaticEditStyle(targetRect, canvasRect, editText)
+        : {
+          position: 'absolute',
+          left: Math.max(8, left) + 'px',
+          top: Math.max(8, top) + 'px',
+          zIndex: 1000,
+          width: width + 'px'
+        };
       this.$nextTick(this._buildCtxLite().focusEditInput);
     },
 
@@ -1765,7 +1788,8 @@ Vue.component('mermaid-preview', {
           <button class="title-context-toolbar__btn title-context-toolbar__btn--danger" @mousedown.prevent="subgraphTitleDelete">Delete</button>\
         </div>\
         <div v-if="editingNodeId" class="node-edit-overlay" :style="editInputStyle">\
-          <input ref="editInput" class="node-edit-input" v-model="editingText" @keydown="onNodeEditKeyDown" @blur="confirmNodeEdit" />\
+          <textarea v-if="isStaticNodeEditing()" ref="editInput" class="node-edit-input node-edit-textarea node-edit-textarea--static" v-model="editingText" @keydown="onStaticNodeEditKeyDown" @blur="confirmNodeEdit"></textarea>\
+          <input v-else ref="editInput" class="node-edit-input" v-model="editingText" @keydown="onNodeEditKeyDown" @blur="confirmNodeEdit" />\
         </div>\
         <div v-if="editingEdgeIndex !== null" class="node-edit-overlay" :style="edgeEditInputStyle">\
           <input ref="editEdgeInput" class="node-edit-input" v-model="editingEdgeText" placeholder="Edge label" @keydown="onEdgeEditKeyDown" @blur="confirmEdgeEdit" />\

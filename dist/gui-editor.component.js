@@ -1,6 +1,6 @@
 /**
  * gui-editor.component.js
- * Built: 2026-05-11T03:02:01.965Z
+ * Built: 2026-05-14T01:15:39.524Z
  *
  * Concatenation of gui-editor source files (no minification).
  * Requires global Vue 2 and Mermaid loaded separately.
@@ -1432,11 +1432,202 @@
 })(typeof window !== 'undefined' ? window : this);
 
 
+/* ===== src/representation/static-flowchart-parser.js ===== */
+(function (global) {
+  'use strict';
+
+  var IDENT_SOURCE = '[A-Za-z_\\u3131-\\uD79D][A-Za-z0-9_\\u3131-\\uD79D]*';
+  var IDENT_RE = new RegExp('^(' + IDENT_SOURCE + ')$');
+
+  function markStatic(model, reason) {
+    if (!model) return;
+    model.profile = 'static';
+    if (!model.staticReasons) model.staticReasons = [];
+    if (reason && model.staticReasons.indexOf(reason) === -1) {
+      model.staticReasons.push(reason);
+    }
+  }
+
+  function decodeEscapedText(text) {
+    var out = '';
+    text = String(text || '');
+    for (var i = 0; i < text.length; i++) {
+      var ch = text.charAt(i);
+      if (ch === '\\' && i + 1 < text.length) {
+        out += text.charAt(i + 1);
+        i++;
+      } else {
+        out += ch;
+      }
+    }
+    return out;
+  }
+
+  function isEscaped(text, index) {
+    var slashCount = 0;
+    for (var i = index - 1; i >= 0 && text.charAt(i) === '\\'; i--) {
+      slashCount++;
+    }
+    return (slashCount % 2) === 1;
+  }
+
+  function splitStyleDeclarations(raw) {
+    raw = String(raw || '');
+    var parts = [];
+    var start = 0;
+    for (var i = 0; i < raw.length; i++) {
+      if (raw.charAt(i) === ',' && !isEscaped(raw, i)) {
+        parts.push(raw.slice(start, i));
+        start = i + 1;
+      }
+    }
+    parts.push(raw.slice(start));
+    return parts;
+  }
+
+  function parseStyleDeclarations(raw) {
+    var chunks = splitStyleDeclarations(raw);
+    var declarations = [];
+    for (var i = 0; i < chunks.length; i++) {
+      var chunk = chunks[i].trim();
+      if (!chunk) continue;
+      var colonIndex = chunk.indexOf(':');
+      if (colonIndex === -1) continue;
+      declarations.push({
+        key: chunk.slice(0, colonIndex).trim(),
+        value: chunk.slice(colonIndex + 1).trim()
+      });
+    }
+    return declarations;
+  }
+
+  function parseDirectiveLine(line) {
+    var trimmed = String(line || '').trim();
+    return /^%%\{[\s\S]*\}%%$/.test(trimmed) ? trimmed : null;
+  }
+
+  function parseHeaderLine(line) {
+    var match = String(line || '').trim().match(/^(graph|flowchart)\s+(TD|TB|BT|LR|RL)\b/i);
+    if (!match) return null;
+    return {
+      keyword: match[1].toLowerCase(),
+      direction: match[2].toUpperCase()
+    };
+  }
+
+  function parseSubgraphOpen(rest, index) {
+    rest = String(rest || '').trim();
+    var idTitleQuoted = new RegExp(
+      '^(' + IDENT_SOURCE + ')\\s*\\[\\s*"((?:\\\\.|[^"])*)"\\s*\\]$'
+    ).exec(rest);
+    if (idTitleQuoted) {
+      return {
+        id: idTitleQuoted[1],
+        title: decodeEscapedText(idTitleQuoted[2]).trim() || idTitleQuoted[1],
+        nodeIds: [],
+        titleBracketStyle: 'quoted'
+      };
+    }
+
+    var idTitleBracket = new RegExp(
+      '^(' + IDENT_SOURCE + ')\\s+\\[(.+)\\]$'
+    ).exec(rest);
+    if (idTitleBracket) {
+      return {
+        id: idTitleBracket[1],
+        title: idTitleBracket[2].trim() || idTitleBracket[1],
+        nodeIds: [],
+        titleBracketStyle: 'bracket'
+      };
+    }
+
+    if (IDENT_RE.test(rest)) {
+      return {
+        id: rest,
+        title: rest,
+        nodeIds: [],
+        titleBracketStyle: ''
+      };
+    }
+
+    var fallbackId = 'SG_' + index;
+    return {
+      id: fallbackId,
+      title: rest || fallbackId,
+      nodeIds: [],
+      titleBracketStyle: rest ? 'title-only' : ''
+    };
+  }
+
+  function parseSubgraphDirection(line) {
+    var match = String(line || '').trim().match(/^direction\s+(TD|TB|BT|LR|RL)$/i);
+    return match ? match[1].toUpperCase() : '';
+  }
+
+  function parseStyleLine(line) {
+    var match = String(line || '').trim().match(new RegExp(
+      '^style\\s+(' + IDENT_SOURCE + ')\\s+(.+)$'
+    ));
+    if (!match) return null;
+    return {
+      target: match[1],
+      declarations: parseStyleDeclarations(match[2]),
+      raw: match[2].trim()
+    };
+  }
+
+  function applyStyleDeclarations(target, style) {
+    if (!target || !style || !style.declarations) return;
+    for (var i = 0; i < style.declarations.length; i++) {
+      var declaration = style.declarations[i];
+      var key = String(declaration.key || '').toLowerCase();
+      if (key === 'fill') target.fill = declaration.value;
+      if (key === 'stroke') target.stroke = declaration.value;
+      if (key === 'color') target.color = declaration.value;
+    }
+  }
+
+  function attachStyleToTarget(model, style, options) {
+    if (!model || !style || !style.target) return false;
+    options = options || {};
+    var node = model._nodeMap && model._nodeMap[style.target];
+    if (node) {
+      node.style = style;
+      applyStyleDeclarations(node, style);
+      return true;
+    }
+
+    var subgraph = model._subgraphMap && model._subgraphMap[style.target];
+    if (subgraph) {
+      subgraph.style = style;
+      applyStyleDeclarations(subgraph, style);
+      if (options.staticProfile) markStatic(model, 'subgraph-style');
+      return true;
+    }
+
+    if (!model.styles) model.styles = [];
+    model.styles.push(style);
+    return false;
+  }
+
+  global.StaticFlowchartParser = {
+    markStatic: markStatic,
+    parseDirectiveLine: parseDirectiveLine,
+    parseHeaderLine: parseHeaderLine,
+    parseSubgraphOpen: parseSubgraphOpen,
+    parseSubgraphDirection: parseSubgraphDirection,
+    parseStyleLine: parseStyleLine,
+    attachStyleToTarget: attachStyleToTarget
+  };
+})(typeof window !== 'undefined' ? window : this);
+
+
 /* ===== src/representation/mermaid-parser.js ===== */
 (function (global) {
   'use strict';
 
   var FlowEdgeCodec = global.FlowEdgeCodec;
+  var StaticFlowchartParser = global.StaticFlowchartParser;
 
   var SHAPE_MAP = [
     { open: '((', close: '))', shape: 'double_circle' },
@@ -1640,6 +1831,13 @@
   }
 
   function parseStyleLine(line, model) {
+    if (StaticFlowchartParser && model.profile === 'static') {
+      var style = StaticFlowchartParser.parseStyleLine(line);
+      if (!style) return;
+      StaticFlowchartParser.attachStyleToTarget(model, style, { staticProfile: model.profile === 'static' });
+      return;
+    }
+
     var match = line.match(/^style\s+([A-Za-z_\u3131-\uD79D][A-Za-z0-9_\u3131-\uD79D]*)\s+(.+)$/);
     if (!match || !model._nodeMap[match[1]]) return;
     var node = model._nodeMap[match[1]];
@@ -1684,10 +1882,14 @@
   }
 
   function pushRawStatement(model, line) {
-    model.statements.push({
+    var statement = {
       type: 'raw',
       raw: line
-    });
+    };
+    if (model.profile === 'static' && model._subgraphStack && model._subgraphStack.length) {
+      statement.subgraphId = model._subgraphStack[model._subgraphStack.length - 1].id;
+    }
+    model.statements.push(statement);
   }
 
   function nextEdgeRef(model, from, to) {
@@ -1797,9 +1999,13 @@
     var model = {
       type: 'flowchart',
       direction: 'TD',
+      headerKeyword: 'flowchart',
+      profile: '',
+      directives: [],
       nodes: [],
       edges: [],
       subgraphs: [],
+      styles: [],
       statements: [],
       _nodeMap: {},
       _pendingEdge: null,
@@ -1817,12 +2023,23 @@
       }
     };
     var started = false;
+    var pendingDirectives = [];
 
     for (var i = 0; i < lines.length; i++) {
       var line = lines[i].trim();
       var sourceInfo = countSourceOccurrence(model, line);
 
-      if (!line || line.indexOf('%%') === 0) continue;
+      if (!line) continue;
+
+      if (StaticFlowchartParser) {
+        var directive = StaticFlowchartParser.parseDirectiveLine(line);
+        if (directive) {
+          pendingDirectives.push(directive);
+          continue;
+        }
+      }
+
+      if (line.indexOf('%%') === 0) continue;
       if (line.indexOf('classDef') === 0 || line.indexOf('class ') === 0) {
         pushRawTarget(model, line, i + 1, 'class', sourceInfo);
         pushRawStatement(model, line);
@@ -1840,14 +2057,25 @@
       }
 
       if (!started) {
-        var headerMatch = line.match(/^(?:graph|flowchart)\s+(TD|TB|BT|LR|RL)/i);
-        if (headerMatch) {
-          model.direction = headerMatch[1].toUpperCase();
+        var parsedHeader = StaticFlowchartParser ? StaticFlowchartParser.parseHeaderLine(line) : null;
+        var headerMatch = parsedHeader ? null : line.match(/^(?:graph|flowchart)\s+(TD|TB|BT|LR|RL)/i);
+        if (parsedHeader || headerMatch) {
+          model.headerKeyword = parsedHeader ? parsedHeader.keyword : (/^graph\b/i.test(line) ? 'graph' : 'flowchart');
+          model.direction = parsedHeader ? parsedHeader.direction : headerMatch[1].toUpperCase();
           if (model.direction === 'TB') model.direction = 'TD';
+          if (model.headerKeyword === 'graph' && StaticFlowchartParser) {
+            StaticFlowchartParser.markStatic(model, 'graph-keyword');
+            model.directives = pendingDirectives.slice();
+          }
           started = true;
           continue;
         }
         if (/^(?:graph|flowchart)\s*$/.test(line)) {
+          model.headerKeyword = /^graph\b/i.test(line) ? 'graph' : 'flowchart';
+          if (model.headerKeyword === 'graph' && StaticFlowchartParser) {
+            StaticFlowchartParser.markStatic(model, 'graph-keyword');
+            model.directives = pendingDirectives.slice();
+          }
           started = true;
           continue;
         }
@@ -1858,6 +2086,16 @@
       // subgraph open: "subgraph id [title]" or "subgraph title" or "subgraph"
       if (/^subgraph\b/.test(line)) {
         var sgRest = line.slice('subgraph'.length).trim();
+        if (model.profile === 'static' && StaticFlowchartParser) {
+          var staticSg = StaticFlowchartParser.parseSubgraphOpen(sgRest, model.subgraphs.length + 1);
+          if (model.profile === 'static' && staticSg && (staticSg.titleBracketStyle === 'quoted' || staticSg.titleBracketStyle === 'title-only')) {
+            StaticFlowchartParser.markStatic(model, 'static-subgraph');
+          }
+          model.subgraphs.push(staticSg);
+          model._subgraphMap[staticSg.id] = staticSg;
+          model._subgraphStack.push(staticSg);
+          continue;
+        }
         var sgId, sgTitle;
         // "id [title]" 형태
         var sgBracket = sgRest.match(/^([A-Za-z_ㄱ-힝][A-Za-z0-9_ㄱ-힝]*)\s+\[(.+)\]$/);
@@ -1881,6 +2119,15 @@
         continue;
       }
 
+      if (model.profile === 'static' && model._subgraphStack.length && StaticFlowchartParser) {
+        var subgraphDirection = StaticFlowchartParser.parseSubgraphDirection(line);
+        if (subgraphDirection) {
+          model._subgraphStack[model._subgraphStack.length - 1].direction = subgraphDirection;
+          StaticFlowchartParser.markStatic(model, 'subgraph-direction');
+          continue;
+        }
+      }
+
       // subgraph close
       if (line === 'end') {
         if (model._subgraphStack.length) model._subgraphStack.pop();
@@ -1895,6 +2142,7 @@
         // 현재 subgraph 안에 있으면 선언된 노드를 subgraph에 등록
         if (model._subgraphStack.length) {
           var currentSg = model._subgraphStack[model._subgraphStack.length - 1];
+          if (model.profile === 'static') statement.subgraphId = currentSg.id;
           var stmtNodeIds = statement.nodeIds || [];
           for (var ni = 0; ni < stmtNodeIds.length; ni++) {
             if (currentSg.nodeIds.indexOf(stmtNodeIds[ni]) === -1) {
@@ -1906,10 +2154,26 @@
       }
     }
 
+    if (StaticFlowchartParser && model.styles && model.styles.length) {
+      var unresolvedStyles = model.styles.slice();
+      model.styles = [];
+      for (var si = 0; si < unresolvedStyles.length; si++) {
+        StaticFlowchartParser.attachStyleToTarget(model, unresolvedStyles[si], { staticProfile: model.profile === 'static' });
+      }
+    }
+
     model.diagnostics = {
       rawStatementCount: model._diagnostics.rawStatementCount,
       rawTargets: model._diagnostics.rawTargets.slice()
     };
+
+    if (model.profile !== 'static') {
+      delete model.headerKeyword;
+      delete model.profile;
+      delete model.directives;
+      delete model.styles;
+    }
+
     delete model._nodeMap;
     delete model._pendingEdge;
     delete model._edgeRefCounts;
@@ -1927,11 +2191,104 @@
 })(typeof window !== 'undefined' ? window : this);
 
 
+/* ===== src/representation/static-flowchart-generator.js ===== */
+(function (global) {
+  'use strict';
+
+  function escapeQuoted(text) {
+    return String(text || '')
+      .replace(/\\/g, '\\\\')
+      .replace(/"/g, '\\"');
+  }
+
+  function generateDirectives(model) {
+    return model && model.directives ? model.directives.slice() : [];
+  }
+
+  function generateHeader(model) {
+    var keyword = model && model.headerKeyword ? model.headerKeyword : 'flowchart';
+    if (keyword !== 'graph' && keyword !== 'flowchart') keyword = 'flowchart';
+    return keyword + ' ' + ((model && model.direction) || 'TD');
+  }
+
+  function generateSubgraphHeader(subgraph) {
+    if (!subgraph) return 'subgraph';
+    var id = subgraph.id;
+    var title = subgraph.title || id;
+    if (!title || title === id) return 'subgraph ' + id;
+
+    if (subgraph.titleBracketStyle === 'quoted') {
+      return 'subgraph ' + id + '["' + escapeQuoted(title) + '"]';
+    }
+
+    return 'subgraph ' + id + ' [' + title + ']';
+  }
+
+  function cloneDeclarations(style) {
+    var out = [];
+    var declarations = style && style.declarations ? style.declarations : [];
+    for (var i = 0; i < declarations.length; i++) {
+      out.push({
+        key: declarations[i].key,
+        value: declarations[i].value
+      });
+    }
+    return out;
+  }
+
+  function upsertDeclaration(declarations, key, value) {
+    if (value === undefined || value === null) return;
+    var normalized = String(key || '').toLowerCase();
+    for (var i = 0; i < declarations.length; i++) {
+      if (String(declarations[i].key || '').toLowerCase() === normalized) {
+        if (value === '') {
+          declarations.splice(i, 1);
+        } else {
+          declarations[i].value = value;
+        }
+        return;
+      }
+    }
+    if (value !== '') declarations.push({ key: key, value: value });
+  }
+
+  function declarationsToString(declarations) {
+    var parts = [];
+    for (var i = 0; i < declarations.length; i++) {
+      if (!declarations[i].key) continue;
+      parts.push(declarations[i].key + ':' + declarations[i].value);
+    }
+    return parts.join(',');
+  }
+
+  function generateStyleLine(target, style, overrides) {
+    if (!target) return '';
+    var declarations = cloneDeclarations(style);
+    overrides = overrides || {};
+    for (var key in overrides) {
+      if (Object.prototype.hasOwnProperty.call(overrides, key)) {
+        upsertDeclaration(declarations, key, overrides[key]);
+      }
+    }
+    var body = declarationsToString(declarations);
+    return body ? '    style ' + target + ' ' + body : '';
+  }
+
+  global.StaticFlowchartGenerator = {
+    generateDirectives: generateDirectives,
+    generateHeader: generateHeader,
+    generateSubgraphHeader: generateSubgraphHeader,
+    generateStyleLine: generateStyleLine
+  };
+})(typeof window !== 'undefined' ? window : this);
+
+
 /* ===== src/representation/mermaid-generator.js ===== */
 (function (global) {
   'use strict';
 
   var FlowEdgeCodec = global.FlowEdgeCodec;
+  var StaticFlowchartGenerator = global.StaticFlowchartGenerator;
 
   var SHAPE_BRACKETS = {
     rect: ['[', ']'],
@@ -2104,24 +2461,102 @@
     return map;
   }
 
-  function generateSubgraphs(model, lines, usedNodes) {
+  function isStaticProfile(model) {
+    return !!(model && model.profile === 'static');
+  }
+
+  function generateStatementLine(statement, model, usedNodes, usedEdges) {
+    if (!statement) return '';
+    if (statement.type === 'raw') return statement.raw || '';
+    if (statement.type === 'flow') return buildFlowStatementLine(statement, model, usedNodes, usedEdges);
+    return '';
+  }
+
+  function generateSubgraphs(model, lines, usedNodes, usedEdges) {
     var subgraphs = model.subgraphs || [];
     if (!subgraphs.length) return;
+    var statements = model.statements || [];
+    var useStaticOutput = isStaticProfile(model);
     for (var i = 0; i < subgraphs.length; i++) {
       var sg = subgraphs[i];
-      var header = sg.title && sg.title !== sg.id
-        ? 'subgraph ' + sg.id + ' [' + sg.title + ']'
-        : 'subgraph ' + sg.id;
+      var header = useStaticOutput && StaticFlowchartGenerator
+        ? StaticFlowchartGenerator.generateSubgraphHeader(sg)
+        : (sg.title && sg.title !== sg.id ? 'subgraph ' + sg.id + ' [' + sg.title + ']' : 'subgraph ' + sg.id);
       lines.push('    ' + header);
-      for (var j = 0; j < sg.nodeIds.length; j++) {
-        var nid = sg.nodeIds[j];
-        var node = findNode(model.nodes, nid);
-        if (node) {
-          lines.push('        ' + generateNode(node));
-          usedNodes[nid] = true;
+      if (useStaticOutput && sg.direction) lines.push('        direction ' + sg.direction);
+
+      var wroteStatement = false;
+      if (useStaticOutput) {
+        for (var s = 0; s < statements.length; s++) {
+          if (statements[s].subgraphId !== sg.id) continue;
+          var statementLine = generateStatementLine(statements[s], model, usedNodes, usedEdges);
+          if (statementLine) {
+            lines.push('        ' + statementLine);
+            wroteStatement = true;
+          }
+        }
+      }
+
+      if (!wroteStatement) {
+        for (var j = 0; j < sg.nodeIds.length; j++) {
+          var nid = sg.nodeIds[j];
+          var node = findNode(model.nodes, nid);
+          if (node) {
+            lines.push('        ' + generateNode(node));
+            usedNodes[nid] = true;
+          }
         }
       }
       lines.push('    end');
+    }
+  }
+
+  function buildNodeStyleLine(node, useStaticOutput) {
+    if (!node) return '';
+    if (useStaticOutput && StaticFlowchartGenerator && node.style) {
+      return StaticFlowchartGenerator.generateStyleLine(node.id, node.style, { fill: node.fill });
+    }
+
+    var fill = normalizeHex(node.fill);
+    if (!fill) return '';
+    return '    style ' + node.id +
+      ' fill:' + fill +
+      ',stroke:' + darkenHex(fill, 0.22) +
+      ',color:' + contrastText(fill);
+  }
+
+  function appendFlowStyles(model, lines) {
+    var useStaticOutput = isStaticProfile(model);
+    var subgraphs = model.subgraphs || [];
+    if (model.nodes && model.nodes.length > 0) {
+      for (var n = 0; n < model.nodes.length; n++) {
+        var nodeStyleLine = buildNodeStyleLine(model.nodes[n], useStaticOutput);
+        if (nodeStyleLine) lines.push(nodeStyleLine);
+      }
+    }
+
+    if (useStaticOutput && StaticFlowchartGenerator) {
+      for (var sg = 0; sg < subgraphs.length; sg++) {
+        var sgStyleLine = StaticFlowchartGenerator.generateStyleLine(subgraphs[sg].id, subgraphs[sg].style, {});
+        if (sgStyleLine) lines.push(sgStyleLine);
+      }
+    }
+
+    var extraStyles = model.styles || [];
+    if (useStaticOutput && StaticFlowchartGenerator) {
+      for (var es = 0; es < extraStyles.length; es++) {
+        var extraStyleLine = StaticFlowchartGenerator.generateStyleLine(extraStyles[es].target, extraStyles[es], {});
+        if (extraStyleLine) lines.push(extraStyleLine);
+      }
+    }
+  }
+
+  function appendLinkStyles(model, lines) {
+    if (model.edges && model.edges.length > 0) {
+      for (var e = 0; e < model.edges.length; e++) {
+        var linkStyle = buildLinkStyle(e, model.edges[e]);
+        if (linkStyle) lines.push(linkStyle);
+      }
     }
   }
 
@@ -2132,8 +2567,13 @@
     }
 
     var lines = [];
-    var direction = model.direction || 'TD';
-    lines.push('flowchart ' + direction);
+    if (isStaticProfile(model) && StaticFlowchartGenerator) {
+      lines = lines.concat(StaticFlowchartGenerator.generateDirectives(model));
+      lines.push(StaticFlowchartGenerator.generateHeader(model));
+    } else {
+      var direction = model.direction || 'TD';
+      lines.push('flowchart ' + direction);
+    }
 
     var usedNodes = {};
     var usedEdges = {};
@@ -2141,19 +2581,15 @@
 
     // subgraph 블록을 먼저 출력하고, 소속 노드를 usedNodes에 기록한다.
     if (subgraphs.length) {
-      generateSubgraphs(model, lines, usedNodes);
+      generateSubgraphs(model, lines, usedNodes, usedEdges);
     }
 
     var statements = model.statements || [];
     if (statements.length) {
       for (var s = 0; s < statements.length; s++) {
         var statement = statements[s];
-        var line = '';
-        if (statement.type === 'raw') {
-          line = statement.raw || '';
-        } else if (statement.type === 'flow') {
-          line = buildFlowStatementLine(statement, model, usedNodes, usedEdges);
-        }
+        if (isStaticProfile(model) && statement.subgraphId) continue;
+        var line = generateStatementLine(statement, model, usedNodes, usedEdges);
         if (line) lines.push('    ' + line);
       }
 
@@ -2174,26 +2610,8 @@
         }
       }
 
-      if (model.nodes && model.nodes.length > 0) {
-        for (var sn = 0; sn < model.nodes.length; sn++) {
-          var styleNode = model.nodes[sn];
-          var styleFill = normalizeHex(styleNode.fill);
-          if (!styleFill) continue;
-          lines.push(
-            '    style ' + styleNode.id +
-            ' fill:' + styleFill +
-            ',stroke:' + darkenHex(styleFill, 0.22) +
-            ',color:' + contrastText(styleFill)
-          );
-        }
-      }
-
-      if (model.edges && model.edges.length > 0) {
-        for (var se = 0; se < model.edges.length; se++) {
-          var styleLine = buildLinkStyle(se, model.edges[se]);
-          if (styleLine) lines.push(styleLine);
-        }
-      }
+      appendFlowStyles(model, lines);
+      appendLinkStyles(model, lines);
 
       return lines.join('\n');
     }
@@ -2214,26 +2632,8 @@
       }
     }
 
-    if (model.nodes && model.nodes.length > 0) {
-      for (var n = 0; n < model.nodes.length; n++) {
-        var node = model.nodes[n];
-        var fill = normalizeHex(node.fill);
-        if (!fill) continue;
-        lines.push(
-          '    style ' + node.id +
-          ' fill:' + fill +
-          ',stroke:' + darkenHex(fill, 0.22) +
-          ',color:' + contrastText(fill)
-        );
-      }
-    }
-
-    if (model.edges && model.edges.length > 0) {
-      for (var e = 0; e < model.edges.length; e++) {
-        var linkStyle = buildLinkStyle(e, model.edges[e]);
-        if (linkStyle) lines.push(linkStyle);
-      }
-    }
+    appendFlowStyles(model, lines);
+    appendLinkStyles(model, lines);
 
     return lines.join('\n');
   }
@@ -3730,8 +4130,58 @@
     { key: 'asymmetric',        label: '>  ]',    name: 'Asymmetric' }
   ];
 
+  function isStaticModel(model) {
+    return !!(model && model.profile === 'static');
+  }
+
+  function toEditableText(model, text) {
+    text = String(text || '');
+    return isStaticModel(model)
+      ? text.replace(/<br\s*\/?>/gi, '\n')
+      : text;
+  }
+
+  function toModelText(model, text) {
+    text = String(text || '');
+    return isStaticModel(model)
+      ? text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').replace(/\n/g, '<br>')
+      : text;
+  }
+
+  function clamp(value, min, max) {
+    return Math.max(min, Math.min(max, value));
+  }
+
+  function buildStaticEditStyle(targetRect, previewRect, text) {
+    var localLeft = previewRect ? targetRect.left - previewRect.left : targetRect.left;
+    var localTop = previewRect ? targetRect.top - previewRect.top : targetRect.top;
+    var lines = String(text || '').split(/\n/);
+    var longest = 0;
+    for (var i = 0; i < lines.length; i++) {
+      longest = Math.max(longest, lines[i].length);
+    }
+
+    var width = clamp(Math.max(240, targetRect.width + 32, longest * 7.5 + 32), 240, 500);
+    var height = clamp(Math.max(100, lines.length * 18 + 24, targetRect.height + 18), 100, 460);
+    var maxLeft = previewRect ? Math.max(8, previewRect.width - width - 8) : localLeft + targetRect.width / 2;
+    var maxTop = previewRect ? Math.max(8, previewRect.height - height - 8) : localTop + targetRect.height / 2;
+
+    return {
+      position: 'absolute',
+      left: clamp(localLeft + targetRect.width / 2 - width / 2, 8, maxLeft) + 'px',
+      top: clamp(localTop + targetRect.height / 2 - height / 2, 8, maxTop) + 'px',
+      zIndex: 1000,
+      width: width + 'px',
+      height: height + 'px'
+    };
+  }
+
   var SvgNodeHandler = {
     SHAPES: SHAPES,
+    isStaticModel: isStaticModel,
+    toEditableText: toEditableText,
+    toModelText: toModelText,
+    buildStaticEditStyle: buildStaticEditStyle,
 
     // svgEl 안의 모든 .node에 인터랙션 연결
     // ctx = MermaidPreview._buildCtx()가 만든 bridge 객체
@@ -3856,17 +4306,22 @@
       var previewRect = ctx.getPreviewRect ? ctx.getPreviewRect() : null;
       var localLeft = previewRect ? rect.left - previewRect.left : rect.left;
       var localTop = previewRect ? rect.top - previewRect.top : rect.top;
-      ctx.setState({
-        editingNodeId:  nodeId,
-        editingText:    node.text || node.id,
-        editingNodeColor: node.fill || '#e2e8f0',
-        editInputStyle: {
+      var model = ctx.getModel ? ctx.getModel() : null;
+      var editText = toEditableText(model, node.text || node.id);
+      var editStyle = isStaticModel(model)
+        ? buildStaticEditStyle(rect, previewRect, editText)
+        : {
           position: 'absolute',
           left:  (localLeft + rect.width  / 2 - 70) + 'px',
           top:   (localTop  + rect.height / 2 - 16) + 'px',
           zIndex: 1000,
           width: '240px'
-        }
+        };
+      ctx.setState({
+        editingNodeId:  nodeId,
+        editingText:    editText,
+        editingNodeColor: node.fill || '#e2e8f0',
+        editInputStyle: editStyle
       });
       ctx.focusEditInput();
     }
@@ -8156,11 +8611,19 @@ Vue.component('mermaid-preview', {
 
     // 공통 노드 편집 유틸
 
+    isStaticDiagram: function () {
+      return !!(this.model && this.model.profile === 'static');
+    },
+
+    isStaticNodeEditing: function () {
+      return !!(this.editingNodeId && this.isStaticDiagram());
+    },
+
     confirmNodeEdit: function () {
       if (this.editingNodeId && this.editingText.trim()) {
         this.$emit('update-node-text', {
           nodeId: this.editingNodeId,
-          text:   this.editingText.trim()
+          text:   SvgNodeHandler.toModelText(this.model, this.editingText.trim())
         });
       }
       this.editingNodeId = null;
@@ -8177,6 +8640,17 @@ Vue.component('mermaid-preview', {
     onNodeEditKeyDown: function (e) {
       if (e.key === 'Enter')  { e.preventDefault(); this.confirmNodeEdit(); }
       if (e.key === 'Escape') { this.cancelNodeEdit(); }
+    },
+
+    onStaticNodeEditKeyDown: function (e) {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        e.preventDefault();
+        this.confirmNodeEdit();
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        this.cancelNodeEdit();
+      }
     },
 
     // 공통 엣지 편집 유틸
@@ -8321,19 +8795,23 @@ Vue.component('mermaid-preview', {
           break;
         }
       }
+      var isStatic = this.isStaticDiagram();
+      var editText = SvgNodeHandler.toEditableText(this.model, node ? (node.text || node.id) : '');
       var width = 240;
       var left = canvasRect ? (targetRect.left - canvasRect.left + (targetRect.width / 2) - (width / 2)) : 0;
       var top = canvasRect ? (targetRect.top - canvasRect.top + (targetRect.height / 2) - 18) : 0;
       this.editingNodeId = nodeId;
-      this.editingText = node ? (node.text || node.id) : '';
+      this.editingText = editText;
       this.editingNodeColor = node && node.fill ? node.fill : '#e2e8f0';
-      this.editInputStyle = {
-        position: 'absolute',
-        left: Math.max(8, left) + 'px',
-        top: Math.max(8, top) + 'px',
-        zIndex: 1000,
-        width: width + 'px'
-      };
+      this.editInputStyle = isStatic
+        ? SvgNodeHandler.buildStaticEditStyle(targetRect, canvasRect, editText)
+        : {
+          position: 'absolute',
+          left: Math.max(8, left) + 'px',
+          top: Math.max(8, top) + 'px',
+          zIndex: 1000,
+          width: width + 'px'
+        };
       this.$nextTick(this._buildCtxLite().focusEditInput);
     },
 
@@ -9133,7 +9611,8 @@ Vue.component('mermaid-preview', {
           <button class="title-context-toolbar__btn title-context-toolbar__btn--danger" @mousedown.prevent="subgraphTitleDelete">Delete</button>\
         </div>\
         <div v-if="editingNodeId" class="node-edit-overlay" :style="editInputStyle">\
-          <input ref="editInput" class="node-edit-input" v-model="editingText" @keydown="onNodeEditKeyDown" @blur="confirmNodeEdit" />\
+          <textarea v-if="isStaticNodeEditing()" ref="editInput" class="node-edit-input node-edit-textarea node-edit-textarea--static" v-model="editingText" @keydown="onStaticNodeEditKeyDown" @blur="confirmNodeEdit"></textarea>\
+          <input v-else ref="editInput" class="node-edit-input" v-model="editingText" @keydown="onNodeEditKeyDown" @blur="confirmNodeEdit" />\
         </div>\
         <div v-if="editingEdgeIndex !== null" class="node-edit-overlay" :style="edgeEditInputStyle">\
           <input ref="editEdgeInput" class="node-edit-input" v-model="editingEdgeText" placeholder="Edge label" @keydown="onEdgeEditKeyDown" @blur="confirmEdgeEdit" />\

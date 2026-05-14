@@ -2,6 +2,7 @@
   'use strict';
 
   var FlowEdgeCodec = global.FlowEdgeCodec;
+  var StaticFlowchartGenerator = global.StaticFlowchartGenerator;
 
   var SHAPE_BRACKETS = {
     rect: ['[', ']'],
@@ -174,24 +175,102 @@
     return map;
   }
 
-  function generateSubgraphs(model, lines, usedNodes) {
+  function isStaticProfile(model) {
+    return !!(model && model.profile === 'static');
+  }
+
+  function generateStatementLine(statement, model, usedNodes, usedEdges) {
+    if (!statement) return '';
+    if (statement.type === 'raw') return statement.raw || '';
+    if (statement.type === 'flow') return buildFlowStatementLine(statement, model, usedNodes, usedEdges);
+    return '';
+  }
+
+  function generateSubgraphs(model, lines, usedNodes, usedEdges) {
     var subgraphs = model.subgraphs || [];
     if (!subgraphs.length) return;
+    var statements = model.statements || [];
+    var useStaticOutput = isStaticProfile(model);
     for (var i = 0; i < subgraphs.length; i++) {
       var sg = subgraphs[i];
-      var header = sg.title && sg.title !== sg.id
-        ? 'subgraph ' + sg.id + ' [' + sg.title + ']'
-        : 'subgraph ' + sg.id;
+      var header = useStaticOutput && StaticFlowchartGenerator
+        ? StaticFlowchartGenerator.generateSubgraphHeader(sg)
+        : (sg.title && sg.title !== sg.id ? 'subgraph ' + sg.id + ' [' + sg.title + ']' : 'subgraph ' + sg.id);
       lines.push('    ' + header);
-      for (var j = 0; j < sg.nodeIds.length; j++) {
-        var nid = sg.nodeIds[j];
-        var node = findNode(model.nodes, nid);
-        if (node) {
-          lines.push('        ' + generateNode(node));
-          usedNodes[nid] = true;
+      if (useStaticOutput && sg.direction) lines.push('        direction ' + sg.direction);
+
+      var wroteStatement = false;
+      if (useStaticOutput) {
+        for (var s = 0; s < statements.length; s++) {
+          if (statements[s].subgraphId !== sg.id) continue;
+          var statementLine = generateStatementLine(statements[s], model, usedNodes, usedEdges);
+          if (statementLine) {
+            lines.push('        ' + statementLine);
+            wroteStatement = true;
+          }
+        }
+      }
+
+      if (!wroteStatement) {
+        for (var j = 0; j < sg.nodeIds.length; j++) {
+          var nid = sg.nodeIds[j];
+          var node = findNode(model.nodes, nid);
+          if (node) {
+            lines.push('        ' + generateNode(node));
+            usedNodes[nid] = true;
+          }
         }
       }
       lines.push('    end');
+    }
+  }
+
+  function buildNodeStyleLine(node, useStaticOutput) {
+    if (!node) return '';
+    if (useStaticOutput && StaticFlowchartGenerator && node.style) {
+      return StaticFlowchartGenerator.generateStyleLine(node.id, node.style, { fill: node.fill });
+    }
+
+    var fill = normalizeHex(node.fill);
+    if (!fill) return '';
+    return '    style ' + node.id +
+      ' fill:' + fill +
+      ',stroke:' + darkenHex(fill, 0.22) +
+      ',color:' + contrastText(fill);
+  }
+
+  function appendFlowStyles(model, lines) {
+    var useStaticOutput = isStaticProfile(model);
+    var subgraphs = model.subgraphs || [];
+    if (model.nodes && model.nodes.length > 0) {
+      for (var n = 0; n < model.nodes.length; n++) {
+        var nodeStyleLine = buildNodeStyleLine(model.nodes[n], useStaticOutput);
+        if (nodeStyleLine) lines.push(nodeStyleLine);
+      }
+    }
+
+    if (useStaticOutput && StaticFlowchartGenerator) {
+      for (var sg = 0; sg < subgraphs.length; sg++) {
+        var sgStyleLine = StaticFlowchartGenerator.generateStyleLine(subgraphs[sg].id, subgraphs[sg].style, {});
+        if (sgStyleLine) lines.push(sgStyleLine);
+      }
+    }
+
+    var extraStyles = model.styles || [];
+    if (useStaticOutput && StaticFlowchartGenerator) {
+      for (var es = 0; es < extraStyles.length; es++) {
+        var extraStyleLine = StaticFlowchartGenerator.generateStyleLine(extraStyles[es].target, extraStyles[es], {});
+        if (extraStyleLine) lines.push(extraStyleLine);
+      }
+    }
+  }
+
+  function appendLinkStyles(model, lines) {
+    if (model.edges && model.edges.length > 0) {
+      for (var e = 0; e < model.edges.length; e++) {
+        var linkStyle = buildLinkStyle(e, model.edges[e]);
+        if (linkStyle) lines.push(linkStyle);
+      }
     }
   }
 
@@ -202,8 +281,13 @@
     }
 
     var lines = [];
-    var direction = model.direction || 'TD';
-    lines.push('flowchart ' + direction);
+    if (isStaticProfile(model) && StaticFlowchartGenerator) {
+      lines = lines.concat(StaticFlowchartGenerator.generateDirectives(model));
+      lines.push(StaticFlowchartGenerator.generateHeader(model));
+    } else {
+      var direction = model.direction || 'TD';
+      lines.push('flowchart ' + direction);
+    }
 
     var usedNodes = {};
     var usedEdges = {};
@@ -211,19 +295,15 @@
 
     // subgraph 블록을 먼저 출력하고, 소속 노드를 usedNodes에 기록한다.
     if (subgraphs.length) {
-      generateSubgraphs(model, lines, usedNodes);
+      generateSubgraphs(model, lines, usedNodes, usedEdges);
     }
 
     var statements = model.statements || [];
     if (statements.length) {
       for (var s = 0; s < statements.length; s++) {
         var statement = statements[s];
-        var line = '';
-        if (statement.type === 'raw') {
-          line = statement.raw || '';
-        } else if (statement.type === 'flow') {
-          line = buildFlowStatementLine(statement, model, usedNodes, usedEdges);
-        }
+        if (isStaticProfile(model) && statement.subgraphId) continue;
+        var line = generateStatementLine(statement, model, usedNodes, usedEdges);
         if (line) lines.push('    ' + line);
       }
 
@@ -244,26 +324,8 @@
         }
       }
 
-      if (model.nodes && model.nodes.length > 0) {
-        for (var sn = 0; sn < model.nodes.length; sn++) {
-          var styleNode = model.nodes[sn];
-          var styleFill = normalizeHex(styleNode.fill);
-          if (!styleFill) continue;
-          lines.push(
-            '    style ' + styleNode.id +
-            ' fill:' + styleFill +
-            ',stroke:' + darkenHex(styleFill, 0.22) +
-            ',color:' + contrastText(styleFill)
-          );
-        }
-      }
-
-      if (model.edges && model.edges.length > 0) {
-        for (var se = 0; se < model.edges.length; se++) {
-          var styleLine = buildLinkStyle(se, model.edges[se]);
-          if (styleLine) lines.push(styleLine);
-        }
-      }
+      appendFlowStyles(model, lines);
+      appendLinkStyles(model, lines);
 
       return lines.join('\n');
     }
@@ -284,26 +346,8 @@
       }
     }
 
-    if (model.nodes && model.nodes.length > 0) {
-      for (var n = 0; n < model.nodes.length; n++) {
-        var node = model.nodes[n];
-        var fill = normalizeHex(node.fill);
-        if (!fill) continue;
-        lines.push(
-          '    style ' + node.id +
-          ' fill:' + fill +
-          ',stroke:' + darkenHex(fill, 0.22) +
-          ',color:' + contrastText(fill)
-        );
-      }
-    }
-
-    if (model.edges && model.edges.length > 0) {
-      for (var e = 0; e < model.edges.length; e++) {
-        var linkStyle = buildLinkStyle(e, model.edges[e]);
-        if (linkStyle) lines.push(linkStyle);
-      }
-    }
+    appendFlowStyles(model, lines);
+    appendLinkStyles(model, lines);
 
     return lines.join('\n');
   }

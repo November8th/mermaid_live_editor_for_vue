@@ -2,6 +2,7 @@
   'use strict';
 
   var FlowEdgeCodec = global.FlowEdgeCodec;
+  var StaticFlowchartParser = global.StaticFlowchartParser;
 
   var SHAPE_MAP = [
     { open: '((', close: '))', shape: 'double_circle' },
@@ -205,6 +206,13 @@
   }
 
   function parseStyleLine(line, model) {
+    if (StaticFlowchartParser && model.profile === 'static') {
+      var style = StaticFlowchartParser.parseStyleLine(line);
+      if (!style) return;
+      StaticFlowchartParser.attachStyleToTarget(model, style, { staticProfile: model.profile === 'static' });
+      return;
+    }
+
     var match = line.match(/^style\s+([A-Za-z_\u3131-\uD79D][A-Za-z0-9_\u3131-\uD79D]*)\s+(.+)$/);
     if (!match || !model._nodeMap[match[1]]) return;
     var node = model._nodeMap[match[1]];
@@ -249,10 +257,14 @@
   }
 
   function pushRawStatement(model, line) {
-    model.statements.push({
+    var statement = {
       type: 'raw',
       raw: line
-    });
+    };
+    if (model.profile === 'static' && model._subgraphStack && model._subgraphStack.length) {
+      statement.subgraphId = model._subgraphStack[model._subgraphStack.length - 1].id;
+    }
+    model.statements.push(statement);
   }
 
   function nextEdgeRef(model, from, to) {
@@ -362,9 +374,13 @@
     var model = {
       type: 'flowchart',
       direction: 'TD',
+      headerKeyword: 'flowchart',
+      profile: '',
+      directives: [],
       nodes: [],
       edges: [],
       subgraphs: [],
+      styles: [],
       statements: [],
       _nodeMap: {},
       _pendingEdge: null,
@@ -382,12 +398,23 @@
       }
     };
     var started = false;
+    var pendingDirectives = [];
 
     for (var i = 0; i < lines.length; i++) {
       var line = lines[i].trim();
       var sourceInfo = countSourceOccurrence(model, line);
 
-      if (!line || line.indexOf('%%') === 0) continue;
+      if (!line) continue;
+
+      if (StaticFlowchartParser) {
+        var directive = StaticFlowchartParser.parseDirectiveLine(line);
+        if (directive) {
+          pendingDirectives.push(directive);
+          continue;
+        }
+      }
+
+      if (line.indexOf('%%') === 0) continue;
       if (line.indexOf('classDef') === 0 || line.indexOf('class ') === 0) {
         pushRawTarget(model, line, i + 1, 'class', sourceInfo);
         pushRawStatement(model, line);
@@ -405,14 +432,25 @@
       }
 
       if (!started) {
-        var headerMatch = line.match(/^(?:graph|flowchart)\s+(TD|TB|BT|LR|RL)/i);
-        if (headerMatch) {
-          model.direction = headerMatch[1].toUpperCase();
+        var parsedHeader = StaticFlowchartParser ? StaticFlowchartParser.parseHeaderLine(line) : null;
+        var headerMatch = parsedHeader ? null : line.match(/^(?:graph|flowchart)\s+(TD|TB|BT|LR|RL)/i);
+        if (parsedHeader || headerMatch) {
+          model.headerKeyword = parsedHeader ? parsedHeader.keyword : (/^graph\b/i.test(line) ? 'graph' : 'flowchart');
+          model.direction = parsedHeader ? parsedHeader.direction : headerMatch[1].toUpperCase();
           if (model.direction === 'TB') model.direction = 'TD';
+          if (model.headerKeyword === 'graph' && StaticFlowchartParser) {
+            StaticFlowchartParser.markStatic(model, 'graph-keyword');
+            model.directives = pendingDirectives.slice();
+          }
           started = true;
           continue;
         }
         if (/^(?:graph|flowchart)\s*$/.test(line)) {
+          model.headerKeyword = /^graph\b/i.test(line) ? 'graph' : 'flowchart';
+          if (model.headerKeyword === 'graph' && StaticFlowchartParser) {
+            StaticFlowchartParser.markStatic(model, 'graph-keyword');
+            model.directives = pendingDirectives.slice();
+          }
           started = true;
           continue;
         }
@@ -423,6 +461,16 @@
       // subgraph open: "subgraph id [title]" or "subgraph title" or "subgraph"
       if (/^subgraph\b/.test(line)) {
         var sgRest = line.slice('subgraph'.length).trim();
+        if (model.profile === 'static' && StaticFlowchartParser) {
+          var staticSg = StaticFlowchartParser.parseSubgraphOpen(sgRest, model.subgraphs.length + 1);
+          if (model.profile === 'static' && staticSg && (staticSg.titleBracketStyle === 'quoted' || staticSg.titleBracketStyle === 'title-only')) {
+            StaticFlowchartParser.markStatic(model, 'static-subgraph');
+          }
+          model.subgraphs.push(staticSg);
+          model._subgraphMap[staticSg.id] = staticSg;
+          model._subgraphStack.push(staticSg);
+          continue;
+        }
         var sgId, sgTitle;
         // "id [title]" 형태
         var sgBracket = sgRest.match(/^([A-Za-z_ㄱ-힝][A-Za-z0-9_ㄱ-힝]*)\s+\[(.+)\]$/);
@@ -446,6 +494,15 @@
         continue;
       }
 
+      if (model.profile === 'static' && model._subgraphStack.length && StaticFlowchartParser) {
+        var subgraphDirection = StaticFlowchartParser.parseSubgraphDirection(line);
+        if (subgraphDirection) {
+          model._subgraphStack[model._subgraphStack.length - 1].direction = subgraphDirection;
+          StaticFlowchartParser.markStatic(model, 'subgraph-direction');
+          continue;
+        }
+      }
+
       // subgraph close
       if (line === 'end') {
         if (model._subgraphStack.length) model._subgraphStack.pop();
@@ -460,6 +517,7 @@
         // 현재 subgraph 안에 있으면 선언된 노드를 subgraph에 등록
         if (model._subgraphStack.length) {
           var currentSg = model._subgraphStack[model._subgraphStack.length - 1];
+          if (model.profile === 'static') statement.subgraphId = currentSg.id;
           var stmtNodeIds = statement.nodeIds || [];
           for (var ni = 0; ni < stmtNodeIds.length; ni++) {
             if (currentSg.nodeIds.indexOf(stmtNodeIds[ni]) === -1) {
@@ -471,10 +529,26 @@
       }
     }
 
+    if (StaticFlowchartParser && model.styles && model.styles.length) {
+      var unresolvedStyles = model.styles.slice();
+      model.styles = [];
+      for (var si = 0; si < unresolvedStyles.length; si++) {
+        StaticFlowchartParser.attachStyleToTarget(model, unresolvedStyles[si], { staticProfile: model.profile === 'static' });
+      }
+    }
+
     model.diagnostics = {
       rawStatementCount: model._diagnostics.rawStatementCount,
       rawTargets: model._diagnostics.rawTargets.slice()
     };
+
+    if (model.profile !== 'static') {
+      delete model.headerKeyword;
+      delete model.profile;
+      delete model.directives;
+      delete model.styles;
+    }
+
     delete model._nodeMap;
     delete model._pendingEdge;
     delete model._edgeRefCounts;
